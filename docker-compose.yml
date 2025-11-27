@@ -20,7 +20,15 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+    environment:
+      RABBITMQ_DEPRECATED_FEATURES_PERMIT: "true"
     restart: always
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # --- Auth Service ---
   auth-service:
@@ -28,9 +36,15 @@ services:
     container_name: auth-service
     ports:
       - "8081:8080"
+    environment:
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      DB_URL: postgres://reminder:reminder@postgres:5432/reminderhub?sslmode=disable
     depends_on:
-      - postgres
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+    restart: on-failure
 
   # --- Core Service ---
   core-service:
@@ -38,9 +52,15 @@ services:
     container_name: core-service
     ports:
       - "8082:8080"
+    environment:
+      CORE_DB_URL: postgres://reminder:reminder@postgres:5432/reminderhub?sslmode=disable
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
-      - postgres
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+    restart: on-failure
 
   # --- Analyzer Service ---
   analyzer-service:
@@ -48,8 +68,12 @@ services:
     container_name: analyzer-service
     ports:
       - "8083:8080"
+    environment:
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
     depends_on:
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
+    restart: on-failure
 
   # --- Collector Service ---
   collector-service:
@@ -57,9 +81,15 @@ services:
     container_name: collector-service
     ports:
       - "8084:8080"
+    environment:
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      DB_URL: postgres://reminder:reminder@postgres:5432/reminderhub?sslmode=disable
     depends_on:
-      - postgres
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+    restart: on-failure
 
 volumes:
   pgdata:
