@@ -1,0 +1,65 @@
+services:
+  # --- Postgres ---
+  postgres:
+    image: postgres:15
+    container_name: reminderhub-postgres
+    environment:
+      POSTGRES_USER: reminder
+      POSTGRES_PASSWORD: reminder
+      POSTGRES_DB: reminderhub
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+
+  # --- RabbitMQ ---
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: reminderhub-rabbit
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    restart: always
+
+  # --- Auth Service ---
+  auth-service:
+    build: ./services/auth
+    container_name: auth-service
+    ports:
+      - "8081:8080"
+    depends_on:
+      - postgres
+      - rabbitmq
+
+  # --- Core Service ---
+  core-service:
+    build: ./services/core
+    container_name: core-service
+    ports:
+      - "8082:8080"
+    depends_on:
+      - postgres
+      - rabbitmq
+
+  # --- Analyzer Service ---
+  analyzer-service:
+    build: ./services/analyzer
+    container_name: analyzer-service
+    ports:
+      - "8083:8080"
+    depends_on:
+      - rabbitmq
+
+  # --- Collector Service ---
+  collector-service:
+    build: ./services/collector
+    container_name: collector-service
+    ports:
+      - "8084:8080"
+    depends_on:
+      - postgres
+      - rabbitmq
+
+volumes:
+  pgdata:
