@@ -17,17 +17,23 @@ services:
   rabbitmq:
     image: rabbitmq:3-management
     container_name: reminderhub-rabbit
+    hostname: rabbitmq
     ports:
       - "5672:5672"
       - "15672:15672"
     environment:
+      RABBITMQ_DEFAULT_USER: rabbit
+      RABBITMQ_DEFAULT_PASS: rabbit
       RABBITMQ_DEPRECATED_FEATURES_PERMIT: "true"
+    volumes:
+      - rabbitmq-lib:/var/lib/rabbitmq
+      - rabbitmq-log:/var/log/rabbitmq
     restart: always
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
       interval: 5s
       timeout: 10s
-      retries: 5
+      retries: 30
       start_period: 30s
 
   # --- Auth Service ---
@@ -37,7 +43,7 @@ services:
     ports:
       - "8081:8080"
     environment:
-      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      RABBIT_URL: amqp://rabbit:rabbit@rabbitmq:5672/
       DB_URL: postgres://reminder:reminder@postgres:5432/reminderhub?sslmode=disable
     depends_on:
       rabbitmq:
@@ -54,7 +60,7 @@ services:
       - "8082:8080"
     environment:
       CORE_DB_URL: postgres://reminder:reminder@postgres:5432/reminderhub?sslmode=disable
-      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      RABBIT_URL: amqp://rabbit:rabbit@rabbitmq:5672/
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -69,7 +75,7 @@ services:
     ports:
       - "8083:8080"
     environment:
-      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      RABBIT_URL: amqp://rabbit:rabbit@rabbitmq:5672/
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -82,7 +88,7 @@ services:
     ports:
       - "8084:8080"
     environment:
-      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      RABBIT_URL: amqp://rabbit:rabbit@rabbitmq:5672/
       DB_URL: postgres://reminder:reminder@postgres:5432/reminderhub?sslmode=disable
     depends_on:
       rabbitmq:
@@ -93,3 +99,7 @@ services:
 
 volumes:
   pgdata:
+  rabbitmq-lib:
+    driver: local
+  rabbitmq-log:
+    driver: local
