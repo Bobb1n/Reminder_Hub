@@ -17,6 +17,7 @@ services:
   rabbitmq:
     image: rabbitmq:3-management
     container_name: reminderhub-rabbit
+    hostname: rabbitmq
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -28,7 +29,7 @@ services:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
       interval: 5s
       timeout: 10s
-      retries: 5
+      retries: 30
       start_period: 30s
 
   # --- API Gateway ---
@@ -109,3 +110,7 @@ services:
 
 volumes:
   pgdata:
+  rabbitmq-lib:
+    driver: local
+  rabbitmq-log:
+    driver: local
