@@ -21,7 +21,8 @@ services:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEPRECATED_FEATURES_PERMIT: "true"
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
     restart: always
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
@@ -30,18 +31,34 @@ services:
       retries: 5
       start_period: 30s
 
+  # --- API Gateway ---
+  api-gateway:
+    build: ./services/api-gateway
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8081
+      CORE_SERVICE_URL: http://core-service:8082
+      COLLECTOR_SERVICE_URL: http://collector-service:8084
+      INTERNAL_TOKEN: "gateway-secret-token"
+      JWT_SECRET: "your-jwt-secret-key"
+      SERVER_PORT: "8080"
+    depends_on:
+      - auth-service
+      - core-service
+      - collector-service
+    restart: on-failure
+
   # --- Auth Service ---
   auth-service:
     build: ./services/auth
     container_name: auth-service
-    ports:
-      - "8081:8080"
     environment:
-      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
       DB_URL: postgres://reminder:reminder@postgres:5432/reminderhub?sslmode=disable
+      JWT_SECRET: "your-jwt-secret-key"
+      SERVER_PORT: "8081"
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       postgres:
         condition: service_started
     restart: on-failure
@@ -50,11 +67,11 @@ services:
   core-service:
     build: ./services/core
     container_name: core-service
-    ports:
-      - "8082:8080"
     environment:
       CORE_DB_URL: postgres://reminder:reminder@postgres:5432/reminderhub?sslmode=disable
       RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      INTERNAL_API_TOKEN: "gateway-secret-token"
+      SERVER_PORT: "8082"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -66,10 +83,10 @@ services:
   analyzer-service:
     build: ./services/analyzer
     container_name: analyzer-service
-    ports:
-      - "8083:8080"
     environment:
       RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      SERVER_PORT: "8083"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -79,11 +96,10 @@ services:
   collector-service:
     build: ./services/collector
     container_name: collector-service
-    ports:
-      - "8084:8080"
     environment:
-      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
       DB_URL: postgres://reminder:reminder@postgres:5432/reminderhub?sslmode=disable
+      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
+      SERVER_PORT: "8084"
     depends_on:
       rabbitmq:
         condition: service_healthy
