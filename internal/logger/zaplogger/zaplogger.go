@@ -21,12 +21,12 @@ func NewLoggerAdapter(env string) (*zapAdapter, func()) {
 	var loggerCfg zap.Config
 	if env == "development" {
 		loggerCfg = zap.Config{
-			Level:             zap.NewAtomicLevelAt(zap.DebugLevel),
-			Development:       true,
-			Encoding:          "console",
-			EncoderConfig:     zap.NewDevelopmentEncoderConfig(),
-			OutputPaths:       []string{"stdout"},
-			ErrorOutputPaths:  []string{"stderr"},
+			Level:            zap.NewAtomicLevelAt(zap.DebugLevel),
+			Development:      true,
+			Encoding:         "console",
+			EncoderConfig:    zap.NewDevelopmentEncoderConfig(),
+			OutputPaths:      []string{"stdout"},
+			ErrorOutputPaths: []string{"stderr"},
 		}
 	} else {
 		loggerCfg = zap.NewProductionConfig()
@@ -120,3 +120,6 @@ func (l *zapAdapter) Sync() error {
 	return l.z.Sync()
 }
 
+func (l *zapAdapter) GetLevel() string {
+	return l.z.Level().String()
+}
