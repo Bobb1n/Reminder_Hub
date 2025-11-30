@@ -19,7 +19,10 @@ type zapAdapter struct {
 // и заключается преимущество использования адаптера и интерфейсов
 func NewLoggerAdapter(env string) (*zapAdapter, func()) {
 	var loggerCfg zap.Config
-	if env == "development" {
+	if env == "production" {
+		loggerCfg = zap.NewProductionConfig()
+		loggerCfg.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
+	} else {
 		loggerCfg = zap.Config{
 			Level:            zap.NewAtomicLevelAt(zap.DebugLevel),
 			Development:      true,
@@ -28,9 +31,6 @@ func NewLoggerAdapter(env string) (*zapAdapter, func()) {
 			OutputPaths:      []string{"stdout"},
 			ErrorOutputPaths: []string{"stderr"},
 		}
-	} else {
-		loggerCfg = zap.NewProductionConfig()
-		loggerCfg.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
 	}
 
 	loggerCfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder

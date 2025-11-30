@@ -3,88 +3,40 @@ package config
 import (
 	"flag"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
+	"yfp/internal/logger"
+	"yfp/internal/rabbitmq"
+	"yfp/services/analyzer/internal/server/echoserver"
 
-	"github.com/pkg/errors"
-	"github.com/spf13/viper"
+	"github.com/ilyakaznacheev/cleanenv"
+	"github.com/joho/godotenv"
 )
 
 var configPath string
 
 type Config struct {
-	ServiceName  string                        `mapstructure:"serviceName"`
-	Logger       *logger.LoggerConfig          `mapstructure:"logger"`
-	Rabbitmq     *rabbitmq.RabbitMQConfig      `mapstructure:"rabbitmq"`
-	Echo         *echoserver.EchoConfig        `mapstructure:"echo"`
-	Grpc         *grpc.GrpcConfig              `mapstructure:"grpc"`
-	GormPostgres *gormpgsql.GormPostgresConfig `mapstructure:"gormPostgres"`
-	Jaeger       *otel.JaegerConfig            `mapstructure:"jaeger"`
+	Environment string `env:"ENV" env-default:"development"`
+	ServiceName string `env:"SERVICE_NAME" env-default:"analyzer"`
+	Logger      *logger.CurrentLogger
+	Rabbitmq    *rabbitmq.RabbitMQConfig `env-prefix:"RABBITMQ_"`
+	Echo        *echoserver.EchoConfig   `env-prefix:"ECHO_"`
 }
 
 func init() {
 	flag.StringVar(&configPath, "config", "", "products write microservice config path")
 }
 
-func InitConfig() (*Config, *logger.LoggerConfig, *otel.JaegerConfig, *gormpgsql.GormPostgresConfig,
-	*grpc.GrpcConfig, *echoserver.EchoConfig, *rabbitmq.RabbitMQConfig, error) {
+func InitConfig() (*Config, *logger.CurrentLogger, *echoserver.EchoConfig, *rabbitmq.RabbitMQConfig, error) {
 
-	env := os.Getenv("APP_ENV")
-	if env == "" {
-		env = "development"
-	}
-
-	if configPath == "" {
-		configPathFromEnv := os.Getenv("CONFIG_PATH")
-		if configPathFromEnv != "" {
-			configPath = configPathFromEnv
-		} else {
-			//https://stackoverflow.com/questions/31873396/is-it-possible-to-get-the-current-root-of-package-structure-as-a-string-in-golan
-			//https://stackoverflow.com/questions/18537257/how-to-get-the-directory-of-the-currently-running-file
-			d, err := dirname()
-			if err != nil {
-				return nil, nil, nil, nil, nil, nil, nil, err
-			}
-
-			configPath = d
-		}
-	}
-
+	_ = godotenv.Load(".env")
 	cfg := &Config{}
-
-	viper.SetConfigName(fmt.Sprintf("config.%s", env))
-	viper.AddConfigPath(configPath)
-	viper.SetConfigType("json")
-
-	if err := viper.ReadInConfig(); err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, errors.Wrap(err, "viper.ReadInConfig")
+	if err := cleanenv.ReadEnv(cfg); err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to parse config %w", err)
 	}
 
-	if err := viper.Unmarshal(cfg); err != nil {
-		return nil, nil, nil, nil, nil, nil, nil, errors.Wrap(err, "viper.Unmarshal")
-	}
-
-	return cfg, cfg.Logger, cfg.Jaeger, cfg.GormPostgres, cfg.Grpc, cfg.Echo, cfg.Rabbitmq, nil
+	return cfg, cfg.Logger, cfg.Echo, cfg.Rabbitmq, nil
 }
 
 func GetMicroserviceName(serviceName string) string {
 	return fmt.Sprintf("%s", strings.ToUpper(serviceName))
-}
-
-func filename() (string, error) {
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", errors.New("unable to get the current filename")
-	}
-	return filename, nil
-}
-
-func dirname() (string, error) {
-	filename, err := filename()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Dir(filename), nil
 }

@@ -11,12 +11,12 @@ import (
 )
 
 type RabbitMQConfig struct {
-	Host         string
-	Port         int
-	User         string
-	Password     string
-	ExchangeName string
-	Kind         string
+	Host         string `env:"HOST" env-default:"localhost"`
+	Port         int    `env:"PORT" env-default:"5672"`
+	User         string `env:"USER" env-default:"rabbit"`
+	Password     string `env:"PASSWORD" env-default:"rabbit"`
+	ExchangeName string `env:"EXCHANGE" env-default:"donotmatter"`
+	Kind         string `env:"KIND" env-default:"topic"`
 }
 
 // Initialize new channel for rabbitmq
