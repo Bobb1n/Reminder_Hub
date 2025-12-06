@@ -12,6 +12,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+const maxBatchSize = 7
+
 type Syncer struct {
 	db        *database.DB
 	rabbit    *rabbitmq.Producer
@@ -66,7 +68,7 @@ func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
 		return nil
 	}
 
-	var rabbitMessages []*rabbitmq.EmailMessage
+	var currentBatch []*rabbitmq.EmailMessage
 	var processed int
 
 	for _, msg := range msgs {
@@ -76,15 +78,24 @@ func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
 			continue
 		}
 		if rabbitMsg != nil {
-			rabbitMessages = append(rabbitMessages, rabbitMsg)
+			currentBatch = append(currentBatch, rabbitMsg)
 			processed++
+
+			if len(currentBatch) >= maxBatchSize {
+				if err := s.rabbit.PublishEmailBatch(currentBatch); err != nil {
+					return errPublishEmail(integration.ID, err)
+				}
+				logger.Info().Int("batch_size", len(currentBatch)).Msg("Batch published")
+				currentBatch = nil
+			}
 		}
 	}
 
-	if len(rabbitMessages) > 0 {
-		if err := s.rabbit.PublishEmailBatch(rabbitMessages); err != nil {
+	if len(currentBatch) > 0 {
+		if err := s.rabbit.PublishEmailBatch(currentBatch); err != nil {
 			return errPublishEmail(integration.ID, err)
 		}
+		logger.Info().Int("batch_size", len(currentBatch)).Msg("Final batch published")
 	}
 
 	ctx := context.Background()
