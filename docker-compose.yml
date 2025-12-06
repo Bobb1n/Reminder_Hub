@@ -4,26 +4,33 @@ services:
     image: postgres:15
     container_name: reminderhub-postgres
     environment:
-      POSTGRES_USER: reminder
-      POSTGRES_PASSWORD: reminder
-      POSTGRES_DB: reminderhub
+      POSTGRES_USER: ${POSTGRES_USER:-reminder}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reminder}
+      POSTGRES_DB: ${POSTGRES_DB:-reminderhub}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reminder}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   # --- RabbitMQ ---
   rabbitmq:
     image: rabbitmq:3-management
     container_name: reminderhub-rabbit
     hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
     ports:
       - "5672:5672"
       - "15672:15672"
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
     restart: always
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
@@ -34,60 +41,72 @@ services:
 
   # --- API Gateway ---
   api-gateway:
-    build: ./services/api-gateway
+    build: 
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
     container_name: api-gateway
     ports:
       - "8080:8080"
+    env_file:
+      - .env
     environment:
-      AUTH_SERVICE_URL: http://auth-service:8081
-      CORE_SERVICE_URL: http://core-service:8082
-      COLLECTOR_SERVICE_URL: http://collector-service:8084
-      INTERNAL_TOKEN: "gateway-secret-token"
-      JWT_SECRET: "your-jwt-secret-key"
-      SERVER_PORT: "8080"
+      - AUTH_SERVICE_URL=http://auth-service:8081
+      - CORE_SERVICE_URL=http://core-service:8082
+      - COLLECTOR_SERVICE_URL=http://collector-service:8083
     depends_on:
-      - auth-service
-      - core-service
-      - collector-service
+      auth-service:
+        condition: service_started
+      core-service:
+        condition: service_started
+      collector-service:
+        condition: service_started
     restart: on-failure
 
   # --- Auth Service ---
   auth-service:
-    build: ./services/auth
+    build: 
+      context: ./services/auth
+      dockerfile: Dockerfile
     container_name: auth-service
+    env_file:
+      - .env
     environment:
-      DB_URL: postgres://reminder:reminder@postgres:5432/reminderhub?sslmode=disable
-      JWT_SECRET: "your-jwt-secret-key"
-      SERVER_PORT: "8081"
+      - SERVER_PORT=8081
+      - DB_URL=postgres://${POSTGRES_USER:-reminder}:${POSTGRES_PASSWORD:-reminder}@postgres:5432/${POSTGRES_DB:-reminderhub}?sslmode=disable
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
     restart: on-failure
 
   # --- Core Service ---
   core-service:
-    build: ./services/core
+    build: 
+      context: ./services/core
+      dockerfile: Dockerfile
     container_name: core-service
+    env_file:
+      - .env
     environment:
-      CORE_DB_URL: postgres://reminder:reminder@postgres:5432/reminderhub?sslmode=disable
-      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
-      INTERNAL_API_TOKEN: "gateway-secret-token"
-      SERVER_PORT: "8082"
+      - SERVER_PORT=8082
+      - CORE_DB_URL=postgres://${POSTGRES_USER:-reminder}:${POSTGRES_PASSWORD:-reminder}@postgres:5432/${POSTGRES_DB:-reminderhub}?sslmode=disable
+      - RABBIT_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
     depends_on:
       rabbitmq:
         condition: service_healthy
       postgres:
-        condition: service_started
+        condition: service_healthy
     restart: on-failure
 
   # --- Analyzer Service ---
   analyzer-service:
-    build: ./services/analyzer
+    build: 
+      context: ./services/analyzer
+      dockerfile: Dockerfile
     container_name: analyzer-service
+    env_file:
+      - .env
     environment:
-      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      SERVER_PORT: "8083"
+      - RABBIT_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -95,22 +114,25 @@ services:
 
   # --- Collector Service ---
   collector-service:
-    build: ./services/collector
+    build: 
+      context: ./services/collector
+      dockerfile: Dockerfile
     container_name: collector-service
+    env_file:
+      - .env
     environment:
-      DB_URL: postgres://reminder:reminder@postgres:5432/reminderhub?sslmode=disable
-      RABBIT_URL: amqp://guest:guest@rabbitmq:5672/
-      SERVER_PORT: "8084"
+      - SERVER_PORT=8083
+      - RABBIT_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
+      - DB_URL=postgres://${POSTGRES_USER:-reminder}:${POSTGRES_PASSWORD:-reminder}@postgres:5432/${POSTGRES_DB:-reminderhub}?sslmode=disable
     depends_on:
       rabbitmq:
         condition: service_healthy
       postgres:
-        condition: service_started
+        condition: service_healthy
     restart: on-failure
 
 volumes:
   pgdata:
-  rabbitmq-lib:
     driver: local
-  rabbitmq-log:
+  rabbitmq-data:
     driver: local
