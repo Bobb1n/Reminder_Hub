@@ -33,7 +33,7 @@ func Load() *Config {
 		IMAPTimeout:      getDur("IMAP_TIMEOUT", 30*time.Second),
 		MaxWorkers:       getInt("MAX_WORKERS", 10),
 		BatchSize:        getInt("BATCH_SIZE", 50),
-		EncryptionKey:    getEnv("ENCRYPTION_KEY", "default-32-char-encryption-key-here!!"),
+		EncryptionKey:    getEnv("ENCRYPTION_KEY", "fV6dIefy6ViClzMX0wYC+fXJf3smOuAI"),
 		InternalAPIToken: getEnv("INTERNAL_API_TOKEN", "gateway-secret-token"),
 	}
 
