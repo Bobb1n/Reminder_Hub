@@ -28,10 +28,7 @@ func NewHandler(db database.DBer, encryptor security.Encryptor) *Handler {
 	}
 }
 
-type CreateIntegrationResponse struct {
-	ID     string `json:"id"`
-	Status string `json:"status"`
-}
+
 
 func (h *Handler) CreateIntegration(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -77,7 +74,7 @@ func (h *Handler) CreateIntegration(c echo.Context) error {
 
 	logger.Info().Str("integration_id", integration.ID).Msg("Integration created successfully")
 
-	return c.JSON(http.StatusCreated, CreateIntegrationResponse{
+	return c.JSON(http.StatusCreated, response.CreateIntegrationResponse{
 		ID:     integration.ID,
 		Status: "created",
 	})

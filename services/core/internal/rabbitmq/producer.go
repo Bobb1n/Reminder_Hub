@@ -24,77 +24,60 @@ type EmailMessage struct {
 	SyncTimestamp string `json:"sync_timestamp"`
 }
 
+type EmailBatchMessage struct {
+	Emails        []*EmailMessage `json:"emails"`
+	BatchSize     int             `json:"batch_size"`
+	SyncTimestamp string          `json:"sync_timestamp"`
+}
+
 func NewProducer(url string) (*Producer, error) {
 	conn, err := amqp.Dial(url)
 	if err != nil {
-		return nil, errFailedToConnect(err)
+		return nil, err
 	}
 
 	channel, err := conn.Channel()
 	if err != nil {
-		return nil, errFailedToOpenChannel(err)
+		return nil, err
 	}
 
 	err = channel.ExchangeDeclare(
-		"email.raw", // name
-		"topic",     // type
-		true,        // durable
-		false,       // auto-deleted
-		false,       // internal
-		false,       // no-wait
-		nil,         // arguments
+		"email.raw",
+		"topic",
+		true,
+		false,
+		false,
+		false,
+		nil,
 	)
 	if err != nil {
-		return nil, errFailedToDeclareExchange(err)
+		return nil, err
 	}
 
 	queue, err := channel.QueueDeclare(
-		"email.raw.process", // name
-		true,                // durable
-		false,               // delete when unused
-		false,               // exclusive
-		false,               // no-wait
-		nil,                 // arguments
-	)
-	if err != nil {
-		return nil, errFailedToDeclareQueue(err)
-	}
-
-	err = channel.QueueBind(
-		queue.Name,    // queue name
-		"email.raw.*", // routing key pattern
-		"email.raw",   // exchange
+		"email.raw.process",
+		true,
+		false,
+		false,
 		false,
 		nil,
 	)
 	if err != nil {
-		return nil, errFailedToBindQueue(err)
-	}
-
-	dlq, err := channel.QueueDeclare(
-		"email.raw.dlq", // name
-		true,            // durable
-		false,           // delete when unused
-		false,           // exclusive
-		false,           // no-wait
-		nil,             // arguments
-	)
-	if err != nil {
-		return nil, errFailedToDeclareDLQ(err)
+		return nil, err
 	}
 
 	err = channel.QueueBind(
-		dlq.Name,        // queue name
-		"email.raw.dlq", // routing key
-		"email.raw",     // exchange
+		queue.Name,
+		"email.raw.*",
+		"email.raw",
 		false,
 		nil,
 	)
 	if err != nil {
-		return nil, errFailedToBindDLQ(err)
+		return nil, err
 	}
 
-	log.Info().Msg("RabbitMQ exchange, queues and bindings created successfully")
+	log.Info().Msg("RabbitMQ producer initialized successfully")
 
 	return &Producer{
 		conn:    conn,
@@ -115,16 +98,15 @@ func (p *Producer) Close() error {
 func (p *Producer) PublishEmail(message *EmailMessage) error {
 	body, err := json.Marshal(message)
 	if err != nil {
-		return errFailedToMarshalMessage(err)
+		log.Error().Err(err).Msg("Failed to marshal email message")
+		return err
 	}
 
-	routingKey := "email.raw.process"
-
 	err = p.channel.Publish(
-		"email.raw", // exchange
-		routingKey,  // routing key
-		false,       // mandatory
-		false,       // immediate
+		"email.raw",
+		"email.raw.process",
+		false,
+		false,
 		amqp.Publishing{
 			ContentType:  "application/json",
 			Body:         body,
@@ -134,11 +116,49 @@ func (p *Producer) PublishEmail(message *EmailMessage) error {
 	)
 
 	if err != nil {
-		log.Error().Err(err).Msgf("ERROR: Failed to publish message to RabbitMQ")
-		return errFailedToPublishMessage(err)
+		log.Error().Err(err).Msg("Failed to publish email to RabbitMQ")
+		return err
 	}
 
-	log.Info().Msgf("Published email to RabbitMQ: %s for user %s (routing key: %s)",
-		message.EmailID, message.UserID, routingKey)
+	log.Debug().Msgf("Published email: %s", message.EmailID)
+	return nil
+}
+
+func (p *Producer) PublishEmailBatch(messages []*EmailMessage) error {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	batchMessage := &EmailBatchMessage{
+		Emails:        messages,
+		BatchSize:     len(messages),
+		SyncTimestamp: time.Now().Format(time.RFC3339),
+	}
+
+	body, err := json.Marshal(batchMessage)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to marshal batch message")
+		return err
+	}
+
+	err = p.channel.Publish(
+		"email.raw",
+		"email.raw.batch",
+		false,
+		false,
+		amqp.Publishing{
+			ContentType:  "application/json",
+			Body:         body,
+			DeliveryMode: amqp.Persistent,
+			Timestamp:    time.Now(),
+		},
+	)
+
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to publish batch to RabbitMQ")
+		return err
+	}
+
+	log.Info().Msgf("Published batch of %d emails", len(messages))
 	return nil
 }
