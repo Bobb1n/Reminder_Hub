@@ -57,13 +57,34 @@ func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
 
 	logger.Info().Int("count", len(msgs)).Msg("Messages found")
 
+	if len(msgs) == 0 {
+		ctx := context.Background()
+		if err := s.db.UpdateLastSync(ctx, integration.ID); err != nil {
+			return errUpdateLastSync(integration.ID, err)
+		}
+		logger.Info().Msg("No messages to process")
+		return nil
+	}
+
+	var rabbitMessages []*rabbitmq.EmailMessage
 	var processed int
+
 	for _, msg := range msgs {
-		if err := s.processMessage(integration, msg, logger); err != nil {
+		rabbitMsg, err := s.processMessage(integration, msg, logger)
+		if err != nil {
 			logger.Warn().Err(err).Str("msg_id", msg.MessageID).Msg("Process failed")
 			continue
 		}
-		processed++
+		if rabbitMsg != nil {
+			rabbitMessages = append(rabbitMessages, rabbitMsg)
+			processed++
+		}
+	}
+
+	if len(rabbitMessages) > 0 {
+		if err := s.rabbit.PublishEmailBatch(rabbitMessages); err != nil {
+			return errPublishEmail(integration.ID, err)
+		}
 	}
 
 	ctx := context.Background()
@@ -75,20 +96,20 @@ func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
 	return nil
 }
 
-func (s *Syncer) processMessage(integration *database.EmailIntegration, msg *EmailMessage, logger zerolog.Logger) error {
+func (s *Syncer) processMessage(integration *database.EmailIntegration, msg *EmailMessage, logger zerolog.Logger) (*rabbitmq.EmailMessage, error) {
 	ctx := context.Background()
 
 	exists, err := s.db.EmailExists(ctx, integration.UserID, msg.MessageID)
 	if err != nil {
-		return errCheckEmailExistence(msg.MessageID, err)
+		return nil, errCheckEmailExistence(msg.MessageID, err)
 	}
 	if exists {
-		return nil
+		return nil, nil
 	}
 
 	emailID, err := util.GenerateUUID()
 	if err != nil {
-		return errGenerateUUID(msg.MessageID, err)
+		return nil, errGenerateUUID(msg.MessageID, err)
 	}
 
 	email := &database.EmailRaw{
@@ -103,7 +124,7 @@ func (s *Syncer) processMessage(integration *database.EmailIntegration, msg *Ema
 	}
 
 	if err := s.db.SaveEmail(ctx, email); err != nil {
-		return errSaveEmail(emailID, err)
+		return nil, errSaveEmail(emailID, err)
 	}
 
 	rabbitMsg := &rabbitmq.EmailMessage{
@@ -117,10 +138,6 @@ func (s *Syncer) processMessage(integration *database.EmailIntegration, msg *Ema
 		SyncTimestamp: time.Now().Format(time.RFC3339),
 	}
 
-	if err := s.rabbit.PublishEmail(rabbitMsg); err != nil {
-		return errPublishEmail(emailID, err)
-	}
-
 	logger.Info().Str("email_id", emailID).Str("from", msg.From).Msg("Email processed")
-	return nil
+	return rabbitMsg, nil
 }

@@ -24,6 +24,12 @@ type EmailMessage struct {
 	SyncTimestamp string `json:"sync_timestamp"`
 }
 
+type EmailBatchMessage struct {
+	Emails        []*EmailMessage `json:"emails"`
+	BatchSize     int             `json:"batch_size"`
+	SyncTimestamp string          `json:"sync_timestamp"`
+}
+
 func NewProducer(url string) (*Producer, error) {
 	conn, err := amqp.Dial(url)
 	if err != nil {
@@ -140,5 +146,46 @@ func (p *Producer) PublishEmail(message *EmailMessage) error {
 
 	log.Info().Msgf("Published email to RabbitMQ: %s for user %s (routing key: %s)",
 		message.EmailID, message.UserID, routingKey)
+	return nil
+}
+
+func (p *Producer) PublishEmailBatch(messages []*EmailMessage) error {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	batchMessage := &EmailBatchMessage{
+		Emails:        messages,
+		BatchSize:     len(messages),
+		SyncTimestamp: time.Now().Format(time.RFC3339),
+	}
+
+	body, err := json.Marshal(batchMessage)
+	if err != nil {
+		return errFailedToMarshalMessage(err)
+	}
+
+	routingKey := "email.raw.batch"
+
+	err = p.channel.Publish(
+		"email.raw", // exchange
+		routingKey,  // routing key
+		false,       // mandatory
+		false,       // immediate
+		amqp.Publishing{
+			ContentType:  "application/json",
+			Body:         body,
+			DeliveryMode: amqp.Persistent,
+			Timestamp:    time.Now(),
+		},
+	)
+
+	if err != nil {
+		log.Error().Err(err).Msgf("ERROR: Failed to publish batch message to RabbitMQ")
+		return errFailedToPublishMessage(err)
+	}
+
+	log.Info().Msgf("Published batch of %d emails to RabbitMQ (routing key: %s)",
+		len(messages), routingKey)
 	return nil
 }
