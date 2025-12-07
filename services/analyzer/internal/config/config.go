@@ -34,7 +34,11 @@ func init() {
 func InitConfig(fx fx.Lifecycle) (*Config, *logger.CurrentLogger, *echoserver.EchoConfig, *rabbitmq.RabbitMQConfig, *mistral.MistralConfig, error) {
 
 	_ = godotenv.Load(".env")
-	cfg := &Config{}
+	cfg := &Config{
+		Rabbitmq:      &rabbitmq.RabbitMQConfig{},
+		Echo:          &echoserver.EchoConfig{},
+		MistralConfig: &mistral.MistralConfig{},
+	}
 	if err := cleanenv.ReadEnv(cfg); err != nil {
 		return nil, nil, nil, nil, nil, fmt.Errorf("failed to parse config %w", err)
 	}
