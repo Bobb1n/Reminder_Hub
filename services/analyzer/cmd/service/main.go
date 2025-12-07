@@ -2,7 +2,6 @@ package main
 
 import (
 	ht "yfp/internal/http"
-	"yfp/internal/logger"
 	"yfp/internal/rabbitmq"
 	aiagent "yfp/services/analyzer/internal/ai_agent"
 	"yfp/services/analyzer/internal/ai_agent/mistral"
@@ -21,7 +20,6 @@ func main() {
 		fx.Options(
 			fx.Provide(
 				config.InitConfig,        //✅
-				logger.NewCurrentLogger,  //✅
 				ht.NewContext,            //✅
 				echoserver.NewEchoServer, //✅
 				rabbitmq.NewRabbitMQConn, //✅

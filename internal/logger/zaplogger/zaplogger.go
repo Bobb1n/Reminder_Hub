@@ -5,6 +5,7 @@ import (
 	"log"
 	"yfp/internal/logger"
 
+	"go.uber.org/fx"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -17,7 +18,7 @@ type zapAdapter struct {
 // Создаём zapLogger, аналогичную функцию в целом можно написать
 // и для любого другого логгера и также её настроить. В этом
 // и заключается преимущество использования адаптера и интерфейсов
-func NewLoggerAdapter(env string) (*zapAdapter, func()) {
+func NewLoggerAdapter(lc fx.Lifecycle, env string) *zapAdapter {
 	var loggerCfg zap.Config
 	if env == "production" {
 		loggerCfg = zap.NewProductionConfig()
@@ -41,10 +42,12 @@ func NewLoggerAdapter(env string) (*zapAdapter, func()) {
 		log.Fatalf("failed to create logger: %v", err)
 	}
 
-	lo := zapAdapter{z: logger}
-	return &lo, func() {
-		_ = logger.Sync()
-	}
+	lc.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			return logger.Sync()
+		},
+	})
+	return &zapAdapter{z: logger}
 }
 
 // enrichZapFields - Выносит общую логику для Debug, Info и Error фукций

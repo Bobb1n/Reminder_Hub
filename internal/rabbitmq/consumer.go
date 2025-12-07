@@ -20,7 +20,7 @@ type IConsumer[T any] interface {
 type Consumer[T any] struct {
 	cfg              *RabbitMQConfig
 	conn             *amqp.Connection
-	log              logger.CurrentLogger
+	log              *logger.CurrentLogger
 	handler          func(queue string, msg amqp.Delivery, dependencies T) error
 	ctx              context.Context
 	consumedMessages map[string]bool
@@ -166,7 +166,7 @@ func (c *Consumer[T]) IsConsumed(msg interface{}) bool {
 	}
 }
 
-func NewConsumer[T any](ctx context.Context, cfg *RabbitMQConfig, conn *amqp.Connection, log logger.CurrentLogger, handler func(queue string, msg amqp.Delivery, dependencies T) error) IConsumer[T] {
+func NewConsumer[T any](ctx context.Context, cfg *RabbitMQConfig, conn *amqp.Connection, log *logger.CurrentLogger, handler func(queue string, msg amqp.Delivery, dependencies T) error) IConsumer[T] {
 	return &Consumer[T]{
 		ctx:              ctx,
 		cfg:              cfg,

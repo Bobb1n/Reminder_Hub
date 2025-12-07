@@ -3,14 +3,17 @@ package config
 import (
 	"flag"
 	"fmt"
+	"log"
 	"strings"
 	"yfp/internal/logger"
+	"yfp/internal/logger/zaplogger"
 	"yfp/internal/rabbitmq"
 	"yfp/services/analyzer/internal/ai_agent/mistral"
 	"yfp/services/analyzer/internal/server/echoserver"
 
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/joho/godotenv"
+	"go.uber.org/fx"
 )
 
 var configPath string
@@ -28,7 +31,7 @@ func init() {
 	flag.StringVar(&configPath, "config", "", "products write microservice config path")
 }
 
-func InitConfig() (*Config, *logger.CurrentLogger, *echoserver.EchoConfig, *rabbitmq.RabbitMQConfig, *mistral.MistralConfig, error) {
+func InitConfig(fx fx.Lifecycle) (*Config, *logger.CurrentLogger, *echoserver.EchoConfig, *rabbitmq.RabbitMQConfig, *mistral.MistralConfig, error) {
 
 	_ = godotenv.Load(".env")
 	cfg := &Config{}
@@ -36,7 +39,11 @@ func InitConfig() (*Config, *logger.CurrentLogger, *echoserver.EchoConfig, *rabb
 		return nil, nil, nil, nil, nil, fmt.Errorf("failed to parse config %w", err)
 	}
 
-	return cfg, cfg.Logger, cfg.Echo, cfg.Rabbitmq, cfg.MistralConfig, nil
+	adapter := zaplogger.NewLoggerAdapter(fx, cfg.Environment)
+
+	log.Printf("Config WAS PARSED. \n\n THERE IS SOME VALUES: Config:%v\n EchoConfig:%v\n RabbitConfig: %v\n", cfg, cfg.Echo, cfg.Rabbitmq)
+
+	return cfg, logger.NewCurrentLogger(adapter), cfg.Echo, cfg.Rabbitmq, cfg.MistralConfig, nil
 }
 
 func GetMicroserviceName(serviceName string) string {

@@ -27,7 +27,7 @@ func NewEchoServer() *echo.Echo {
 	return e
 }
 
-func RunEchoServer(ctx context.Context, echo *echo.Echo, log logger.CurrentLogger, cfg *EchoConfig) error {
+func RunEchoServer(ctx context.Context, echo *echo.Echo, log *logger.CurrentLogger, cfg *EchoConfig) error {
 	echo.Server.ReadTimeout = ReadTimeout
 	echo.Server.WriteTimeout = WriteTimeout
 	echo.Server.MaxHeaderBytes = MaxHeaderBytes
@@ -43,7 +43,7 @@ func RunEchoServer(ctx context.Context, echo *echo.Echo, log logger.CurrentLogge
 		log.Info(savedCtx, "server exited properly")
 	}()
 
-	err := echo.Start(cfg.Host + ":" + cfg.Port)
+	err := echo.Start(cfg.Port)
 
 	return err
 }

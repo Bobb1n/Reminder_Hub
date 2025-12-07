@@ -10,7 +10,7 @@ import (
 )
 
 type AnalyzerDeliveryBase struct {
-	Log               logger.CurrentLogger
+	Log               *logger.CurrentLogger
 	RabbitmqPublisher rabbitmq.IPublisher
 	ConnRabbitmq      *amqp.Connection
 	Echo              *echo.Echo

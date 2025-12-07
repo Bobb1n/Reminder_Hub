@@ -15,7 +15,7 @@ const numberOfConsumers = 4
 
 func ConfigConsumers(
 	ctx context.Context,
-	log logger.CurrentLogger,
+	log *logger.CurrentLogger,
 	connRabbitmq *amqp.Connection,
 	rabbitmqPublisher rmq.IPublisher,
 	aiagent *aiagent.Agent,

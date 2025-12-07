@@ -12,7 +12,7 @@ import (
 	"go.uber.org/fx"
 )
 
-func RunServers(lc fx.Lifecycle, log logger.CurrentLogger, e *echo.Echo, ctx context.Context, cfg *config.Config) error {
+func RunServers(lc fx.Lifecycle, log *logger.CurrentLogger, e *echo.Echo, ctx context.Context, cfg *config.Config) error {
 
 	lc.Append(fx.Hook{
 		OnStart: func(_ context.Context) error {
