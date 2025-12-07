@@ -5,8 +5,10 @@ import (
 	"yfp/internal/logger"
 	"yfp/internal/rabbitmq"
 	aiagent "yfp/services/analyzer/internal/ai_agent"
+	"yfp/services/analyzer/internal/ai_agent/mistral"
 	"yfp/services/analyzer/internal/config"
 	"yfp/services/analyzer/internal/middleware/configurations"
+	rc "yfp/services/analyzer/internal/rabbitmq"
 	"yfp/services/analyzer/internal/server"
 	"yfp/services/analyzer/internal/server/echoserver"
 
@@ -24,12 +26,13 @@ func main() {
 				echoserver.NewEchoServer, //✅
 				rabbitmq.NewRabbitMQConn, //✅
 				rabbitmq.NewPublisher,    //✅
-				rabbitmq.NewConsumer,     //✅
 				validator.New,            //✅
-				aiagent.NewAgent,         //❌
+				mistral.NewMistralConn,
+				aiagent.NewAgent,
 			),
 			fx.Invoke(server.RunServers),                //✅
 			fx.Invoke(configurations.ConfigMiddlewares), //✅
+			fx.Invoke(rc.ConfigConsumers),               //✅
 		),
 	).Run()
 }

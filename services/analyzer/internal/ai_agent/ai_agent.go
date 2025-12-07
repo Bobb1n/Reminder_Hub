@@ -1,16 +1,23 @@
 package aiagent
 
 import (
-	"context"
 	"yfp/services/analyzer/internal/shared/delivery"
 
 	"github.com/streadway/amqp"
 )
 
-func NewAgent(ctx context.Context) (llm, error) {
-
+type AiAgent interface {
+	ConvertEmail(queue string, msg amqp.Delivery, dependencies *delivery.AnalyzerDeliveryBase) error
 }
 
-func ConvertEmail(queue string, msg amqp.Delivery, dependencies *delivery.AnalyzerDeliveryBase) error {
+type Agent struct {
+	ai AiAgent
+}
 
+func NewAgent(ai AiAgent) *Agent {
+	return &Agent{ai: ai}
+}
+
+func (a *Agent) ConvertEmail(queue string, msg amqp.Delivery, dependencies *delivery.AnalyzerDeliveryBase) error {
+	return a.ConvertEmail(queue, msg, dependencies)
 }

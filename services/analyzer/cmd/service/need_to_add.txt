@@ -1,3 +1,0 @@
-- В общий конфиг надо добавить создание zaplogger.NewLoggerAdapter. 
-Ну типа парсятся envы, загружаются в zaplogger.NewLoggerAdapter (который должен вызываться внутри InitConfig). 
-И вот InitConfig возвращает LoggerAdapter, который потом вставляется в NewCurrentLogger через fx dependency injection в main файле.
