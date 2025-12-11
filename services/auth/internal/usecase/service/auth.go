@@ -12,8 +12,8 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/auth/internal/domain/models"
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/auth/internal/repository"
+	"auth/internal/domain/models"
+	"auth/internal/repository"
 )
 
 const (

@@ -3,11 +3,11 @@ package main
 import (
 	"log"
 
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/auth/internal/config"
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/auth/internal/repository/postgres"
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/auth/internal/transport/http"
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/auth/internal/usecase/service"
-	postgresDB "github.com/Bobb1n/Reminder_Hub/tree/develop/services/auth/pkg/postgres"
+	"auth/internal/config"
+	"auth/internal/usecase/service"
+	"auth/internal/repository/postgres"
+	"auth/internal/transport/http"
+	postgresDB "auth/pkg/postgres"
 )
 
 func main() {

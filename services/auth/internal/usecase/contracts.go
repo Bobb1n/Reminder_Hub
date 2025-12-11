@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/auth/internal/domain/models"
+	"auth/internal/domain/models"
 )
 
 type AuthUsecase interface {
@@ -16,3 +16,4 @@ type AuthUsecase interface {
 	Logout(ctx context.Context, accessToken, refreshToken string) error
 	ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error
 }
+

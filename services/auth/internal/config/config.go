@@ -5,7 +5,7 @@ import (
 
 	"github.com/ilyakaznacheev/cleanenv"
 
-	postgresConfig "github.com/Bobb1n/Reminder_Hub/tree/develop/services/auth/pkg/postgres"
+	postgresConfig "auth/pkg/postgres"
 )
 
 type Config struct {

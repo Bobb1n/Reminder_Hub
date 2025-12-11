@@ -3,9 +3,9 @@ package main
 import (
 	"log"
 
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/api-gateway/internal/config"
-	auth "github.com/Bobb1n/Reminder_Hub/tree/develop/services/api-gateway/internal/middleware"
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/api-gateway/internal/proxy"
+	"api-gateway/internal/config"
+	auth "api-gateway/internal/middleware"
+	"api-gateway/internal/proxy"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )

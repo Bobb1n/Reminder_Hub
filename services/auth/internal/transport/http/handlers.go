@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/auth/internal/usecase"
+	"auth/internal/usecase"
 )
 
 const bearerPrefix = "Bearer"

@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/auth/internal/domain/models"
+	"auth/internal/domain/models"
 )
 
 type UserRepository interface {
@@ -22,3 +22,4 @@ type BlacklistRepository interface {
 	IsTokenBlacklisted(ctx context.Context, tokenID string) (bool, error)
 	CleanExpiredTokens(ctx context.Context) error
 }
+

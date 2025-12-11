@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/auth/internal/domain/models"
+	"auth/internal/domain/models"
 )
 
 type UserRepo struct {
