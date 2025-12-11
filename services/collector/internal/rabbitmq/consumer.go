@@ -2,7 +2,6 @@ package rabbitmq
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -167,13 +166,4 @@ func (c *Consumer) processMessage(ctx context.Context, msg amqp.Delivery) {
 	}
 
 	log.Debug().Msgf("Message processed successfully: %s", messageID)
-}
-
-func ParseEmail(body []byte) (*ParsedEmail, error) {
-	var email ParsedEmail
-	if err := json.Unmarshal(body, &email); err != nil {
-		log.Error().Err(err).Msg("Failed to parse email message")
-		return nil, err
-	}
-	return &email, nil
 }
