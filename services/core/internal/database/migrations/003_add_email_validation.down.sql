@@ -1,0 +1,1 @@
+ALTER TABLE email_integrations DROP CONSTRAINT IF EXISTS email_integrations_email_address_check;
