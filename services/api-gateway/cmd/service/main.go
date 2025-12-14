@@ -6,6 +6,7 @@ import (
 	"api-gateway/internal/config"
 	auth "api-gateway/internal/middleware"
 	"api-gateway/internal/proxy"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -51,7 +52,9 @@ func main() {
 
 	api := e.Group("/api/v1")
 	{
+		// Применяем AutoIMAPMiddleware только к integrations
 		integrations := api.Group("/integrations/email")
+		integrations.Use(auth.AutoIMAPMiddleware()) // Добавляем middleware
 		integrations.Any("/*", coreProxy.Proxy)
 
 		reminders := api.Group("/reminders")
