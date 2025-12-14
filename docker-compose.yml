@@ -53,12 +53,20 @@ services:
 
   # --- Auth Service ---
   auth-service:
-    build: ./services/auth
+    build:
+      context: ./services/auth
+      target: service
     container_name: auth-service
     environment:
-      DB_URL: postgres://reminder:reminder@postgres:5432/reminderhub?sslmode=disable
+      POSTGRES_USER: reminder
+      POSTGRES_PASSWORD: reminder
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: reminderhub
       JWT_SECRET: "your-jwt-secret-key"
       SERVER_PORT: "8081"
+    ports:
+      - "8081:8081"
     depends_on:
       postgres:
         condition: service_started
