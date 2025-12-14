@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/collector/internal/database"
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/collector/internal/service"
+	"collector/internal/database"
+	"collector/internal/service"
 	"github.com/labstack/echo/v4"
 	"gopkg.in/go-playground/validator.v9"
 )

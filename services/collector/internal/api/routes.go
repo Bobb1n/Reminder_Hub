@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/collector/internal/api/response"
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/collector/internal/service"
+	"collector/internal/api/response"
+	"collector/internal/service"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"gopkg.in/go-playground/validator.v9"

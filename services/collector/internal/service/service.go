@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/collector/internal/database"
-	"github.com/Bobb1n/Reminder_Hub/tree/develop/services/collector/internal/util"
+	"collector/internal/database"
+	"collector/internal/util"
 )
 
 type TaskService struct {
