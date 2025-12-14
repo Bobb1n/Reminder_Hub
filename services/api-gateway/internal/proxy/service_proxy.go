@@ -40,7 +40,6 @@ func (p *ServiceProxy) Proxy(c echo.Context) error {
 		// Добавляем внутренний токен
 		req.Header.Set("X-Internal-Token", p.internalToken)
 
-		// Добавляем X-User-ID (core service ожидает X-User-ID с заглавной ID)
 		if userID, ok := c.Get("user_id").(string); ok {
 			req.Header.Set("X-User-ID", userID)
 		}
