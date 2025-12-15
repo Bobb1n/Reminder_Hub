@@ -13,6 +13,8 @@ import (
 	"collector/internal/rabbitmq"
 	"collector/internal/service"
 	"collector/logger"
+	"strings"
+
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -44,9 +46,19 @@ func main() {
 
 	log.Info().Msgf("Using migrations from: %s", absPath)
 
+	// Добавляем параметр для использования отдельной таблицы миграций для collector
+	migrationURL := cfg.DBURL
+	if migrationURL[len(migrationURL)-1] != '?' && migrationURL[len(migrationURL)-1] != '&' {
+		if strings.Contains(migrationURL, "?") {
+			migrationURL += "&x-migrations-table=collector_schema_migrations"
+		} else {
+			migrationURL += "?x-migrations-table=collector_schema_migrations"
+		}
+	}
+
 	m, err := migrate.New(
 		"file://"+absPath,
-		cfg.DBURL,
+		migrationURL,
 	)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create migrate instance")
