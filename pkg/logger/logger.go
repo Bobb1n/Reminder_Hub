@@ -73,3 +73,4 @@ func LoggerFromContext(ctx context.Context) *CurrentLogger {
 	logger, _ := ctx.Value(ctxKey{}).(*CurrentLogger)
 	return logger
 }
+

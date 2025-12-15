@@ -10,10 +10,14 @@ RUN go build -o service ./cmd/service
 
 FROM alpine:latest
 
+RUN apk --no-cache add ca-certificates tzdata
+
 WORKDIR /app
 
 COPY --from=builder /app/service .
 
-EXPOSE 8080
+COPY --from=builder /app/internal/database/migrations ./internal/database/migrations
+
+EXPOSE 8083
 
 CMD ["./service"]

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
-	"yfp/internal/logger"
+	"reminder-hub/pkg/logger"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/streadway/amqp"
@@ -64,3 +64,4 @@ func NewRabbitMQConn(cfg *RabbitMQConfig, ctx context.Context, log *logger.Curre
 
 	return conn, err
 }
+

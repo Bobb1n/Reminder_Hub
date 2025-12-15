@@ -25,3 +25,4 @@ type ParsedEmails struct {
 	Deadline    time.Time `json:"deadline"`
 	From        string    `json:"from_address"`
 }
+

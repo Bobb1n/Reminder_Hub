@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"sync"
 	"time"
-	"yfp/internal/logger"
+	"reminder-hub/pkg/logger"
 
 	"github.com/ettle/strcase"
 	"github.com/streadway/amqp"
@@ -176,3 +176,4 @@ func NewConsumer[T any](ctx context.Context, cfg *RabbitMQConfig, conn *amqp.Con
 		consumedMessages: make(map[string]bool),
 		mu:               sync.Mutex{}}
 }
+

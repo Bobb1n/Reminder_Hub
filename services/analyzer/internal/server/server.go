@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"yfp/internal/logger"
-	"yfp/services/analyzer/internal/config"
-	"yfp/services/analyzer/internal/server/echoserver"
+	"reminder-hub/pkg/logger"
+	"reminder-hub/services/analyzer/internal/config"
+	"reminder-hub/services/analyzer/internal/server/echoserver"
 
 	"github.com/labstack/echo/v4"
 	"go.uber.org/fx"

@@ -1,7 +1,7 @@
 package aiagent
 
 import (
-	"yfp/services/analyzer/internal/shared/delivery"
+	"reminder-hub/services/analyzer/internal/shared/delivery"
 
 	"github.com/streadway/amqp"
 )

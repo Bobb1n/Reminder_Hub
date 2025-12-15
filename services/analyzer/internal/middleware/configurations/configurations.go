@@ -2,7 +2,7 @@ package configurations
 
 import (
 	"strings"
-	echomiddleware "yfp/services/analyzer/internal/middleware"
+	echomiddleware "reminder-hub/services/analyzer/internal/middleware"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"

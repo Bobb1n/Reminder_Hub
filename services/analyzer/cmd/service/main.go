@@ -1,15 +1,15 @@
 package main
 
 import (
-	ht "yfp/internal/http"
-	"yfp/internal/rabbitmq"
-	aiagent "yfp/services/analyzer/internal/ai_agent"
-	"yfp/services/analyzer/internal/ai_agent/mistral"
-	"yfp/services/analyzer/internal/config"
-	"yfp/services/analyzer/internal/middleware/configurations"
-	rc "yfp/services/analyzer/internal/rabbitmq"
-	"yfp/services/analyzer/internal/server"
-	"yfp/services/analyzer/internal/server/echoserver"
+	ht "reminder-hub/pkg/http"
+	"reminder-hub/pkg/rabbitmq"
+	aiagent "reminder-hub/services/analyzer/internal/ai_agent"
+	"reminder-hub/services/analyzer/internal/ai_agent/mistral"
+	"reminder-hub/services/analyzer/internal/config"
+	"reminder-hub/services/analyzer/internal/middleware/configurations"
+	rc "reminder-hub/services/analyzer/internal/rabbitmq"
+	"reminder-hub/services/analyzer/internal/server"
+	"reminder-hub/services/analyzer/internal/server/echoserver"
 
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/fx"

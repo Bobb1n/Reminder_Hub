@@ -3,7 +3,7 @@ package zaplogger
 import (
 	"context"
 	"log"
-	"yfp/internal/logger"
+	"reminder-hub/pkg/logger"
 
 	"go.uber.org/fx"
 	"go.uber.org/zap"

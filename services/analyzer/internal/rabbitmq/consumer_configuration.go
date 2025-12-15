@@ -2,11 +2,11 @@ package rabbit_configurations
 
 import (
 	"context"
-	"yfp/internal/logger"
-	"yfp/internal/models"
-	rmq "yfp/internal/rabbitmq"
-	aiagent "yfp/services/analyzer/internal/ai_agent"
-	"yfp/services/analyzer/internal/shared/delivery"
+	"reminder-hub/pkg/logger"
+	"reminder-hub/pkg/models"
+	rmq "reminder-hub/pkg/rabbitmq"
+	aiagent "reminder-hub/services/analyzer/internal/ai_agent"
+	"reminder-hub/services/analyzer/internal/shared/delivery"
 
 	"github.com/streadway/amqp"
 )

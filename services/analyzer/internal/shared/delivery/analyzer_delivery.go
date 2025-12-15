@@ -2,8 +2,8 @@ package delivery
 
 import (
 	"context"
-	"yfp/internal/logger"
-	"yfp/internal/rabbitmq"
+	"reminder-hub/pkg/logger"
+	"reminder-hub/pkg/rabbitmq"
 
 	"github.com/labstack/echo/v4"
 	"github.com/streadway/amqp"

@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"sync"
 	"time"
-	"yfp/internal/logger"
+	"reminder-hub/pkg/logger"
 
 	"github.com/ettle/strcase"
 	jsoniter "github.com/json-iterator/go"
@@ -109,3 +109,4 @@ func (p *Publisher) IsPublished(msg interface{}) bool {
 func NewPublisher(ctx context.Context, cfg *RabbitMQConfig, conn *amqp.Connection, log logger.CurrentLogger) IPublisher {
 	return &Publisher{ctx: ctx, cfg: cfg, conn: conn, log: log, publishedMessages: make(map[string]bool), mu: sync.Mutex{}}
 }
+
