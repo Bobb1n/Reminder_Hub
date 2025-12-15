@@ -1,23 +1,25 @@
 package aiagent
 
 import (
+	"context"
+	"reminder-hub/services/analyzer/internal/ai_agent/mistral"
 	"reminder-hub/services/analyzer/internal/shared/delivery"
 
 	"github.com/streadway/amqp"
 )
 
 type AiAgent interface {
-	ConvertEmail(queue string, msg amqp.Delivery, dependencies *delivery.AnalyzerDeliveryBase) error
+	ConvertEmail(ctx context.Context, queue string, msg amqp.Delivery, dependencies *delivery.AnalyzerDeliveryBase) error
 }
 
 type Agent struct {
-	ai AiAgent
+	mistralAgent *mistral.MistralAgent
 }
 
-func NewAgent(ai AiAgent) *Agent {
-	return &Agent{ai: ai}
+func NewAgent(mistralAgent *mistral.MistralAgent) *Agent {
+	return &Agent{mistralAgent: mistralAgent}
 }
 
 func (a *Agent) ConvertEmail(queue string, msg amqp.Delivery, dependencies *delivery.AnalyzerDeliveryBase) error {
-	return a.ConvertEmail(queue, msg, dependencies)
+	return a.mistralAgent.ConvertEmail(dependencies.Ctx, queue, msg, dependencies)
 }

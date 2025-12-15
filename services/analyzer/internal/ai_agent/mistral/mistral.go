@@ -31,7 +31,7 @@ type MistralAgent struct {
 
 const numberOfWorkers = 4
 
-func NewMistralConn(ctx context.Context, cfg MistralConfig, log *logger.CurrentLogger) (*MistralAgent, error) {
+func NewMistralConn(ctx context.Context, cfg *MistralConfig, log *logger.CurrentLogger) (*MistralAgent, error) {
 	llm, err := mistral.New(
 		mistral.WithAPIKey(cfg.api),
 		mistral.WithModel(cfg.model),

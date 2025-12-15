@@ -3,9 +3,9 @@ package rabbitmq
 import (
 	"context"
 	"reflect"
+	"reminder-hub/pkg/logger"
 	"sync"
 	"time"
-	"reminder-hub/pkg/logger"
 
 	"github.com/ettle/strcase"
 	jsoniter "github.com/json-iterator/go"
@@ -106,7 +106,6 @@ func (p *Publisher) IsPublished(msg interface{}) bool {
 	return isPublished
 }
 
-func NewPublisher(ctx context.Context, cfg *RabbitMQConfig, conn *amqp.Connection, log logger.CurrentLogger) IPublisher {
-	return &Publisher{ctx: ctx, cfg: cfg, conn: conn, log: log, publishedMessages: make(map[string]bool), mu: sync.Mutex{}}
+func NewPublisher(ctx context.Context, cfg *RabbitMQConfig, conn *amqp.Connection, log *logger.CurrentLogger) IPublisher {
+	return &Publisher{ctx: ctx, cfg: cfg, conn: conn, log: *log, publishedMessages: make(map[string]bool), mu: sync.Mutex{}}
 }
-
