@@ -8,8 +8,7 @@ import (
 	"core/internal/rabbitmq"
 	"core/internal/security"
 	"core/internal/util"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
+	"reminder-hub/pkg/logger"
 )
 
 const maxBatchSize = 7
@@ -19,14 +18,16 @@ type Syncer struct {
 	rabbit    *rabbitmq.Producer
 	encryptor security.Encryptor
 	timeout   time.Duration
+	log       *logger.CurrentLogger
 }
 
-func NewSyncer(db *database.DB, rabbit *rabbitmq.Producer, enc security.Encryptor, timeout time.Duration) *Syncer {
-	return &Syncer{db: db, rabbit: rabbit, encryptor: enc, timeout: timeout}
+func NewSyncer(db *database.DB, rabbit *rabbitmq.Producer, enc security.Encryptor, timeout time.Duration, log *logger.CurrentLogger) *Syncer {
+	return &Syncer{db: db, rabbit: rabbit, encryptor: enc, timeout: timeout, log: log}
 }
 
 func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
-	logger := log.With().Str("id", integration.ID).Str("email", integration.EmailAddress).Logger()
+	ctx := context.Background()
+	ctx = logger.WithRequestID(ctx, integration.ID)
 
 	pass, err := s.encryptor.Decrypt(integration.Password)
 	if err != nil {
@@ -39,7 +40,7 @@ func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
 	}
 	defer func() {
 		if err := imapClient.Logout(); err != nil {
-			logger.Warn().Err(err).Msg("Logout failed")
+			s.log.Warn(ctx, "Logout failed", "error", err)
 		}
 	}()
 
@@ -57,14 +58,13 @@ func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
 		return errGetMessages(integration.EmailAddress, err)
 	}
 
-	logger.Info().Int("count", len(msgs)).Msg("Messages found")
+	s.log.Info(ctx, "Messages found", "count", len(msgs), "email", integration.EmailAddress)
 
 	if len(msgs) == 0 {
-		ctx := context.Background()
 		if err := s.db.UpdateLastSync(ctx, integration.ID); err != nil {
 			return errUpdateLastSync(integration.ID, err)
 		}
-		logger.Info().Msg("No messages to process")
+		s.log.Info(ctx, "No messages to process")
 		return nil
 	}
 
@@ -72,9 +72,9 @@ func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
 	var processed int
 
 	for _, msg := range msgs {
-		rabbitMsg, err := s.processMessage(integration, msg, logger)
+		rabbitMsg, err := s.processMessage(ctx, integration, msg)
 		if err != nil {
-			logger.Warn().Err(err).Str("msg_id", msg.MessageID).Msg("Process failed")
+			s.log.Warn(ctx, "Process failed", "error", err, "msg_id", msg.MessageID)
 			continue
 		}
 		if rabbitMsg != nil {
@@ -85,7 +85,7 @@ func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
 				if err := s.rabbit.PublishEmailBatch(currentBatch); err != nil {
 					return errPublishEmail(integration.ID, err)
 				}
-				logger.Info().Int("batch_size", len(currentBatch)).Msg("Batch published")
+				s.log.Info(ctx, "Batch published", "batch_size", len(currentBatch))
 				currentBatch = nil
 			}
 		}
@@ -95,20 +95,18 @@ func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
 		if err := s.rabbit.PublishEmailBatch(currentBatch); err != nil {
 			return errPublishEmail(integration.ID, err)
 		}
-		logger.Info().Int("batch_size", len(currentBatch)).Msg("Final batch published")
+		s.log.Info(ctx, "Final batch published", "batch_size", len(currentBatch))
 	}
 
-	ctx := context.Background()
 	if err := s.db.UpdateLastSync(ctx, integration.ID); err != nil {
 		return errUpdateLastSync(integration.ID, err)
 	}
 
-	logger.Info().Int("processed", processed).Msg("Sync done")
+	s.log.Info(ctx, "Sync done", "processed", processed)
 	return nil
 }
 
-func (s *Syncer) processMessage(integration *database.EmailIntegration, msg *EmailMessage, logger zerolog.Logger) (*rabbitmq.EmailMessage, error) {
-	ctx := context.Background()
+func (s *Syncer) processMessage(ctx context.Context, integration *database.EmailIntegration, msg *EmailMessage) (*rabbitmq.EmailMessage, error) {
 
 	exists, err := s.db.EmailExists(ctx, integration.UserID, msg.MessageID)
 	if err != nil {
@@ -149,6 +147,6 @@ func (s *Syncer) processMessage(integration *database.EmailIntegration, msg *Ema
 		SyncTimestamp: time.Now().Format(time.RFC3339),
 	}
 
-	logger.Info().Str("email_id", emailID).Str("from", msg.From).Msg("Email processed")
+	s.log.Info(ctx, "Email processed", "email_id", emailID, "from", msg.From)
 	return rabbitMsg, nil
 }
