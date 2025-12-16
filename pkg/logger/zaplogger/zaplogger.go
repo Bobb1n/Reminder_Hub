@@ -126,3 +126,4 @@ func (l *zapAdapter) Sync() error {
 func (l *zapAdapter) GetLevel() string {
 	return l.z.Level().String()
 }
+

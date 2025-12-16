@@ -16,7 +16,7 @@ func Load() *Config {
         ServerPort:        getEnv("SERVER_PORT", "8080"),
         AuthServiceURL:    getEnv("AUTH_SERVICE_URL", "http://auth-service:8081"),
         CoreServiceURL:    getEnv("CORE_SERVICE_URL", "http://core-service:8082"),
-        CollectorServiceURL: getEnv("COLLECTOR_SERVICE_URL", "http://collector-service:8084"),
+        CollectorServiceURL: getEnv("COLLECTOR_SERVICE_URL", "http://collector-service:8083"),
         InternalToken:     getEnv("INTERNAL_API_TOKEN", "gateway-secret-token"),
         JWTSecret:         getEnv("JWT_SECRET", "your-jwt-secret-key"),
     }

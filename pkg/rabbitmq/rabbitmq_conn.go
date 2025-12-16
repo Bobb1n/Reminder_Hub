@@ -65,3 +65,4 @@ func NewRabbitMQConn(cfg *RabbitMQConfig, ctx context.Context, log *logger.Curre
 	return conn, err
 }
 
+

@@ -177,3 +177,4 @@ func NewConsumer[T any](ctx context.Context, cfg *RabbitMQConfig, conn *amqp.Con
 		mu:               sync.Mutex{}}
 }
 
+

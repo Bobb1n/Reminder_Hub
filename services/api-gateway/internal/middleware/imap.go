@@ -134,3 +134,4 @@ func getDefaultIMAPSettings(domain string) IMAPSettings {
 		SSL:  true,
 	}
 }
+

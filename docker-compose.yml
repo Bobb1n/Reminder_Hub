@@ -50,6 +50,7 @@ services:
     env_file:
       - .env
     environment:
+      - SERVER_PORT=8080
       - AUTH_SERVICE_URL=http://auth-service:8081
       - CORE_SERVICE_URL=http://core-service:8082
       - COLLECTOR_SERVICE_URL=http://collector-service:8083

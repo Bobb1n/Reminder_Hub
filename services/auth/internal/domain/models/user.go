@@ -15,3 +15,4 @@ type User struct {
 	UpdatedAt    time.Time `db:"updated_at"`
 }
 
+

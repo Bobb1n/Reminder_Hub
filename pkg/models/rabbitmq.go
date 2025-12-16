@@ -26,3 +26,4 @@ type ParsedEmails struct {
 	From        string    `json:"from_address"`
 }
 
+
