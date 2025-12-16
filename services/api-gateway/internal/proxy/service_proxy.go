@@ -1,9 +1,15 @@
 package proxy
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
+
+	"reminder-hub/pkg/logger"
 
 	"github.com/labstack/echo/v4"
 )
@@ -11,9 +17,10 @@ import (
 type ServiceProxy struct {
 	targetURL     *url.URL
 	internalToken string
+	logger        *logger.CurrentLogger
 }
 
-func NewServiceProxy(targetURL, internalToken string) (*ServiceProxy, error) {
+func NewServiceProxy(targetURL, internalToken string, log *logger.CurrentLogger) (*ServiceProxy, error) {
 	parsedURL, err := url.Parse(targetURL)
 	if err != nil {
 		return nil, err
@@ -22,6 +29,7 @@ func NewServiceProxy(targetURL, internalToken string) (*ServiceProxy, error) {
 	return &ServiceProxy{
 		targetURL:     parsedURL,
 		internalToken: internalToken,
+		logger:        log,
 	}, nil
 }
 
@@ -32,12 +40,48 @@ func (p *ServiceProxy) Proxy(c echo.Context) error {
 	proxy.Director = func(req *http.Request) {
 		originalDirector(req)
 
-		// Передаем Authorization header от клиента
-		if authHeader := c.Request().Header.Get("Authorization"); authHeader != "" {
-			req.Header.Set("Authorization", authHeader)
+		// Переписываем путь для integrations
+		// Используем реальный путь запроса, а не шаблон маршрута
+		requestPath := c.Request().URL.Path
+		ctx := c.Request().Context()
+
+		if strings.HasPrefix(requestPath, "/api/v1/integrations/email") {
+			if c.Request().Method == http.MethodGet {
+				// Для GET запросов подставляем user_id в путь
+				if userID, ok := c.Get("user_id").(string); ok && userID != "" {
+					newPath := "/api/integrations/" + userID
+					req.URL.Path = newPath
+					p.logger.Debug(ctx, "Rewritten path for GET", "from", requestPath, "to", newPath)
+				} else {
+					// Если user_id не найден, логируем ошибку
+					p.logger.Warn(ctx, "user_id not found in context for GET /api/v1/integrations/email")
+				}
+			} else {
+				// Для POST, PUT, DELETE запросов убираем /v1/integrations/email
+				req.URL.Path = "/api/integrations"
+				p.logger.Debug(ctx, "Rewritten path", "method", c.Request().Method, "from", requestPath, "to", "/api/integrations")
+			}
 		}
 
-		// Добавляем внутренний токен
+		// Копируем body из модифицированного запроса (после middleware)
+		// Это важно, если middleware изменил body (например, AutoIMAPMiddleware)
+		if c.Request().Body != nil && (c.Request().Method == http.MethodPost || c.Request().Method == http.MethodPut || c.Request().Method == http.MethodPatch) {
+			bodyBytes, err := io.ReadAll(c.Request().Body)
+			if err == nil && len(bodyBytes) > 0 {
+				req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+				req.ContentLength = int64(len(bodyBytes))
+				req.Header.Set("Content-Length", fmt.Sprintf("%d", len(bodyBytes)))
+				// Восстанавливаем body в оригинальном запросе для возможного повторного использования
+				c.Request().Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+				p.logger.Debug(ctx, "Copied body to proxy request", "length", len(bodyBytes))
+			}
+		}
+
+		// Для core-service передаем внутренний токен в Authorization header
+		// (core-service ожидает внутренний токен, а не токен пользователя)
+		req.Header.Set("Authorization", "Bearer "+p.internalToken)
+
+		// Также добавляем внутренний токен в отдельный header для совместимости
 		req.Header.Set("X-Internal-Token", p.internalToken)
 
 		if userID, ok := c.Get("user_id").(string); ok {

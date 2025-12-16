@@ -4,13 +4,21 @@ RUN apk add --no-cache git make
 
 WORKDIR /app
 
-COPY go.mod go.sum ./
+# Копируем корневой go.mod для монорепо
+COPY go.mod ./
+COPY go.sum* ./
 
+# Копируем общие пакеты из корня
+COPY pkg/ ./pkg/
+
+# Копируем код сервиса auth
+COPY services/auth/ ./services/auth/
+
+# Переходим в директорию сервиса
+WORKDIR /app/services/auth
+
+# Скачиваем зависимости
 RUN go mod download
-
-COPY . .
-
-RUN go mod tidy
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-w -s" \
@@ -32,7 +40,7 @@ WORKDIR /app
 COPY --from=builder /app/bin/service /app/service
 COPY --from=builder /app/bin/migrate /app/migrate
 
-COPY --from=builder /app/migrations /app/migrations
+COPY --from=builder /app/services/auth/migrations /app/migrations
 
 RUN chown -R appuser:appuser /app
 USER appuser

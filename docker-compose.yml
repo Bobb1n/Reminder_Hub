@@ -42,8 +42,8 @@ services:
   # --- API Gateway ---
   api-gateway:
     build: 
-      context: ./services/api-gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./services/api-gateway/Dockerfile
     container_name: api-gateway
     ports:
       - "8080:8080"
@@ -66,7 +66,8 @@ services:
   # --- Auth Migrations ---
   auth-migrate:
     build:
-      context: ./services/auth
+      context: .
+      dockerfile: ./services/auth/Dockerfile
       target: migrate
     container_name: auth-migrate
     env_file:
@@ -85,7 +86,8 @@ services:
   # --- Auth Service ---
   auth-service:
     build:
-      context: ./services/auth
+      context: .
+      dockerfile: ./services/auth/Dockerfile
       target: service
     container_name: auth-service
     env_file:
