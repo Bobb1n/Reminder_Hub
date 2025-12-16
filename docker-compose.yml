@@ -63,6 +63,25 @@ services:
         condition: service_started
     restart: on-failure
 
+  # --- Auth Migrations ---
+  auth-migrate:
+    build:
+      context: ./services/auth
+      target: migrate
+    container_name: auth-migrate
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-reminder}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-reminder}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-reminderhub}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   # --- Auth Service ---
   auth-service:
     build:
@@ -75,6 +94,8 @@ services:
       - SERVER_PORT=8081
       - DB_URL=postgres://${POSTGRES_USER:-reminder}:${POSTGRES_PASSWORD:-reminder}@postgres:5432/${POSTGRES_DB:-reminderhub}?sslmode=disable
     depends_on:
+      auth-migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
     restart: on-failure

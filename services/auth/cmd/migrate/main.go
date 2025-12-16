@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -114,15 +113,10 @@ func runMigration(db *sql.DB, filename, migrationPath string) error {
 		}
 	}()
 
-	queries := strings.Split(sqlQuery, ";")
-	for _, query := range queries {
-		query = strings.TrimSpace(query)
-		if query == "" || strings.HasPrefix(query, "--") {
-			continue
-		}
-		if _, execErr := tx.ExecContext(ctx, query); execErr != nil {
-			return fmt.Errorf("execute query: %w", execErr)
-		}
+	// Выполняем весь SQL файл целиком
+	// PostgreSQL поддерживает выполнение нескольких команд через ; в одной транзакции
+	if _, execErr := tx.ExecContext(ctx, sqlQuery); execErr != nil {
+		return fmt.Errorf("execute query: %w", execErr)
 	}
 
 	if _, err := tx.ExecContext(ctx,
