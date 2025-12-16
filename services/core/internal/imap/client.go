@@ -9,7 +9,6 @@ import (
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
 	"github.com/emersion/go-message/charset"
-	"github.com/rs/zerolog/log"
 )
 
 func init() { imap.CharsetReader = charset.Reader }
@@ -83,8 +82,6 @@ func (ic *Client) GetUnseenMessages(since *time.Time) ([]*EmailMessage, error) {
 	for msg := range msgs {
 		if em, err := parseMessage(msg); err == nil {
 			result = append(result, em)
-		} else {
-			log.Warn().Err(err).Msg("parse message")
 		}
 	}
 

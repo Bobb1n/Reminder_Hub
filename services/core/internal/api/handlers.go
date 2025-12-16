@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -10,32 +11,34 @@ import (
 	"core/internal/database"
 	"core/internal/security"
 	"core/internal/util"
+	"reminder-hub/pkg/logger"
+
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 type Handler struct {
 	db        database.DBer
 	encryptor security.Encryptor
+	log       *logger.CurrentLogger
 }
 
-func NewHandler(db database.DBer, encryptor security.Encryptor) *Handler {
+func NewHandler(db database.DBer, encryptor security.Encryptor, log *logger.CurrentLogger) *Handler {
 	return &Handler{
 		db:        db,
 		encryptor: encryptor,
+		log:       log,
 	}
 }
-
-
 
 func (h *Handler) CreateIntegration(c echo.Context) error {
 	ctx := c.Request().Context()
 	requestID := c.Response().Header().Get(echo.HeaderXRequestID)
-	logger := log.With().Str("request_id", requestID).Logger()
+	if requestID != "" {
+		ctx = logger.WithRequestID(ctx, requestID)
+	}
 
-	logger.Info().Msg("CreateIntegration called")
+	h.log.Info(ctx, "CreateIntegration called")
 
 	var req database.CreateIntegrationRequest
 	if err := bindAndValidate(c, &req); err != nil {
@@ -43,25 +46,22 @@ func (h *Handler) CreateIntegration(c echo.Context) error {
 	}
 
 	userID := c.Get(ContextKeyUserID).(string)
-	logger.Info().
-		Str("user_id", userID).
-		Str("email", req.EmailAddress).
-		Msg("Creating integration")
+	h.log.Info(ctx, "Creating integration", "user_id", userID, "email", req.EmailAddress)
 
-	encryptedPassword, err := h.encryptPassword(req.Password, logger)
+	encryptedPassword, err := h.encryptPassword(ctx, req.Password)
 	if err != nil {
 		return err
 	}
 
-	integration, err := h.createIntegrationRecord(&req, userID, encryptedPassword, logger)
+	integration, err := h.createIntegrationRecord(ctx, &req, userID, encryptedPassword)
 	if err != nil {
 		return err
 	}
 
-	logger.Info().Str("integration_id", integration.ID).Msg("Saving to database")
+	h.log.Info(ctx, "Saving to database", "integration_id", integration.ID)
 
 	if err := h.db.CreateIntegration(ctx, integration); err != nil {
-		logger.Error().Err(err).Msg("Failed to create integration in DB")
+		h.log.Error(ctx, "Failed to create integration in DB", "error", err)
 		if errors.Is(err, database.ErrDuplicateIntegration) {
 			return c.JSON(http.StatusConflict, response.ErrorResponse{
 				Error: "Integration already exists for this user and email",
@@ -72,13 +72,13 @@ func (h *Handler) CreateIntegration(c echo.Context) error {
 		})
 	}
 
-	logger.Info().Str("integration_id", integration.ID).Msg("Integration created successfully")
+	h.log.Info(ctx, "Integration created successfully", "integration_id", integration.ID)
 
 	return c.JSON(http.StatusCreated, response.CreateIntegrationResponse{
 		ID:     integration.ID,
 		Status: "created",
 	})
-}
+} //"+absPath,
 
 func (h *Handler) GetUserIntegrations(c echo.Context) error {
 	ctx := c.Request().Context()
@@ -92,7 +92,7 @@ func (h *Handler) GetUserIntegrations(c echo.Context) error {
 
 	integrations, err := h.db.GetUserIntegrations(ctx, userID)
 	if err != nil {
-		log.Error().Err(err).Msgf("Failed to get integrations for user %s", userID)
+		h.log.Error(ctx, "Failed to get integrations for user", "error", err, "user_id", userID)
 		return c.JSON(http.StatusInternalServerError, response.ErrorResponse{
 			Error: "Failed to get integrations",
 		})
@@ -107,7 +107,7 @@ func (h *Handler) DeleteIntegration(c echo.Context) error {
 	userID := c.Get(ContextKeyUserID).(string)
 
 	if err := h.db.DeleteIntegration(ctx, userID, integrationID); err != nil {
-		log.Error().Err(err).Msgf("Failed to delete integration %s for user %s", integrationID, userID)
+		h.log.Error(ctx, "Failed to delete integration", "error", err, "integration_id", integrationID, "user_id", userID)
 		if errors.Is(err, database.ErrIntegrationNotFound) {
 			return c.JSON(http.StatusNotFound, response.ErrorResponse{
 				Error: "Integration not found or access denied",
@@ -121,10 +121,10 @@ func (h *Handler) DeleteIntegration(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
-func (h *Handler) createIntegrationRecord(req *database.CreateIntegrationRequest, userID, encryptedPassword string, logger zerolog.Logger) (*database.EmailIntegration, error) {
+func (h *Handler) createIntegrationRecord(ctx context.Context, req *database.CreateIntegrationRequest, userID, encryptedPassword string) (*database.EmailIntegration, error) {
 	integrationID, err := util.GenerateUUID()
 	if err != nil {
-		logger.Error().Err(err).Msg("Failed to generate UUID")
+		h.log.Error(ctx, "Failed to generate UUID", "error", err)
 		return nil, echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate ID")
 	}
 
@@ -158,10 +158,10 @@ func bindAndValidate(c echo.Context, req *database.CreateIntegrationRequest) err
 	return nil
 }
 
-func (h *Handler) encryptPassword(password string, logger zerolog.Logger) (string, error) {
+func (h *Handler) encryptPassword(ctx context.Context, password string) (string, error) {
 	encryptedPassword, err := h.encryptor.Encrypt(password)
 	if err != nil {
-		logger.Error().Err(err).Msg("Failed to encrypt password")
+		h.log.Error(ctx, "Failed to encrypt password", "error", err)
 		return "", echo.NewHTTPError(http.StatusInternalServerError, "Failed to encrypt password")
 	}
 	return encryptedPassword, nil

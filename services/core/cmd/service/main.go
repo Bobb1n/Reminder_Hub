@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -14,37 +15,44 @@ import (
 	"core/internal/rabbitmq"
 	"core/internal/security"
 	scheduler "core/internal/sheduler"
+	pkgrabbitmq "reminder-hub/pkg/rabbitmq"
 	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/labstack/echo/v4"
-	"github.com/rs/zerolog/log"
 )
 
 func main() {
-	logger.Init()
+	ctx := context.Background()
 
-	cfg := config.Load()
-	log.Info().Msg("Configuration loaded")
+	
+	env := os.Getenv("ENV")
+	if env == "" {
+		env = "development"
+	}
+	appLogger := logger.Init(env)
+
+	cfg := config.Load(appLogger)
+	appLogger.Info(ctx, "Configuration loaded")
 
 	db, err := database.NewDB(cfg.DBURL)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to connect to database")
+		appLogger.Fatal(ctx, "Failed to connect to database", "error", err)
 	}
 	defer db.Close()
-	log.Info().Msg("Database connected")
+	appLogger.Info(ctx, "Database connected")
 
 	migrationPath := "internal/database/migrations"
 	absPath, err := filepath.Abs(migrationPath)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to get absolute path for migrations")
+		appLogger.Fatal(ctx, "Failed to get absolute path for migrations", "error", err)
 	}
 
-	log.Info().Msgf("Using migrations from: %s", absPath)
+	appLogger.Info(ctx, "Using migrations", "path", absPath)
 
-	// Добавляем параметр для использования отдельной таблицы миграций для core
+	
 	migrationURL := cfg.DBURL
 	if migrationURL[len(migrationURL)-1] != '?' && migrationURL[len(migrationURL)-1] != '&' {
 		if strings.Contains(migrationURL, "?") {
@@ -59,43 +67,51 @@ func main() {
 		migrationURL,
 	)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create migrate instance")
+		appLogger.Fatal(ctx, "Failed to create migrate instance", "error", err)
 	}
 
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-		log.Fatal().Err(err).Msg("Failed to run migrations")
+		appLogger.Fatal(ctx, "Failed to run migrations", "error", err)
 	}
-	log.Info().Msg("Migrations completed")
+	appLogger.Info(ctx, "Migrations completed")
 
-	rabbit, err := rabbitmq.NewProducer(cfg.RabbitURL)
+	
+	rabbitConn, err := pkgrabbitmq.NewRabbitMQConn(cfg.Rabbitmq, ctx, appLogger)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to connect to RabbitMQ")
+		appLogger.Fatal(ctx, "Failed to connect to RabbitMQ", "error", err)
+	}
+	defer rabbitConn.Close()
+	appLogger.Info(ctx, "RabbitMQ connected")
+
+	
+	rabbit, err := rabbitmq.NewProducerWithConn(rabbitConn, cfg.Rabbitmq, appLogger, ctx)
+	if err != nil {
+		appLogger.Fatal(ctx, "Failed to create RabbitMQ producer", "error", err)
 	}
 	defer rabbit.Close()
-	log.Info().Msg("RabbitMQ connected")
 
 	encryptor := security.NewEncryptor(cfg.EncryptionKey)
 
-	syncer := imap.NewSyncer(db, rabbit, encryptor, cfg.IMAPTimeout)
+	syncer := imap.NewSyncer(db, rabbit, encryptor, cfg.IMAPTimeout, appLogger)
 
-	sched := scheduler.NewScheduler(db, syncer, cfg.MaxWorkers, cfg.BatchSize, cfg.SyncInterval)
+	sched := scheduler.NewScheduler(db, syncer, cfg.MaxWorkers, cfg.BatchSize, cfg.SyncInterval, appLogger)
 	sched.Start()
 	defer sched.Stop()
 
 	e := echo.New()
 
-	api.SetupRoutes(e, db, encryptor, cfg.InternalAPIToken)
+	api.SetupRoutes(e, db, encryptor, cfg.InternalAPIToken, appLogger)
 
 	go func() {
 		if err := e.Start(":" + cfg.ServerPort); err != nil {
-			log.Info().Err(err).Msg("Server stopped")
+			appLogger.Info(ctx, "Server stopped", "error", err)
 		}
 	}()
-	log.Info().Msgf("Server started on port %s", cfg.ServerPort)
+	appLogger.Info(ctx, "Server started", "port", cfg.ServerPort)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
 
-	log.Info().Msg("Shutting down server...")
+	appLogger.Info(ctx, "Shutting down server...")
 }
