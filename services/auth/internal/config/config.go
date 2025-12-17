@@ -17,6 +17,11 @@ type Config struct {
 	Port      int    `env:"SERVER_PORT" env-default:"8081"`
 	JWTSecret string `env:"JWT_SECRET"`
 
+	RedisHost     string `env:"REDIS_HOST" env-default:"localhost"`
+	RedisPort     int    `env:"REDIS_PORT" env-default:"6379"`
+	RedisPassword string `env:"REDIS_PASSWORD" env-default:""`
+	RedisDB       int    `env:"REDIS_DB" env-default:"0"`
+
 	postgresConfig.Config
 	Logger *logger.CurrentLogger
 }
@@ -32,7 +37,6 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("JWT_SECRET is required")
 	}
 
-	// Инициализируем логгер
 	env := os.Getenv("ENV")
 	if env == "" {
 		env = "development"
@@ -44,7 +48,6 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// simpleLifecycle - упрощенная реализация fx.Lifecycle для сервисов без Fx
 type simpleLifecycle struct {
 	hooks []fx.Hook
 }

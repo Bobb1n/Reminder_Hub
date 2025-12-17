@@ -9,14 +9,3 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
--- Создание таблицы blacklisted_tokens
-CREATE TABLE IF NOT EXISTS blacklisted_tokens (
-    token_id VARCHAR(64) PRIMARY KEY,
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
-
--- Индексы для blacklisted_tokens
-CREATE INDEX IF NOT EXISTS idx_blacklisted_tokens_expires_at ON blacklisted_tokens(expires_at);
-CREATE INDEX IF NOT EXISTS idx_blacklisted_tokens_token_id ON blacklisted_tokens(token_id);
-

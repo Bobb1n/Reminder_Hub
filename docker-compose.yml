@@ -39,6 +39,21 @@ services:
       retries: 30
       start_period: 30s
 
+  # --- Redis ---
+  redis:
+    image: redis:7-alpine
+    container_name: reminderhub-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   # --- API Gateway ---
   api-gateway:
     build: 
@@ -95,10 +110,14 @@ services:
     environment:
       - SERVER_PORT=8081
       - DB_URL=postgres://${POSTGRES_USER:-reminder}:${POSTGRES_PASSWORD:-reminder}@postgres:5432/${POSTGRES_DB:-reminderhub}?sslmode=disable
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     depends_on:
       auth-migrate:
         condition: service_completed_successfully
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: on-failure
 
@@ -165,4 +184,6 @@ volumes:
   pgdata:
     driver: local
   rabbitmq-data:
+    driver: local
+  redis-data:
     driver: local
