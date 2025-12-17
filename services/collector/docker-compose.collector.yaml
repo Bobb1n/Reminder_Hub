@@ -12,10 +12,32 @@ services:
       - pgdata:/var/lib/postgresql/data
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reminder}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reminder} -d ${POSTGRES_DB:-reminderhub}"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # --- RabbitMQ ---
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: reminderhub-rabbit
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    restart: always
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+  
   collector-service:
     build: 
       dockerfile: Dockerfile
@@ -26,10 +48,15 @@ services:
       - SERVER_PORT=8083
       - DB_URL=postgres://${POSTGRES_USER:-reminder}:${POSTGRES_PASSWORD:-reminder}@postgres:5432/${POSTGRES_DB:-reminderhub}?sslmode=disable
     depends_on:
+      rabbitmq:
+        condition: service_healthy
       postgres:
         condition: service_healthy
     restart: on-failure
 
+
 volumes:
   pgdata:
+    driver: local
+  rabbitmq-data:
     driver: local

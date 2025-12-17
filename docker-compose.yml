@@ -13,7 +13,7 @@ services:
       - pgdata:/var/lib/postgresql/data
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reminder}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reminder} -d ${POSTGRES_DB:-reminderhub}"]
       interval: 5s
       timeout: 5s
       retries: 5
