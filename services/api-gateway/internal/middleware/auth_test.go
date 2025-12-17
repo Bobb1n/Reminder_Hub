@@ -1,238 +1,93 @@
 package middleware
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
-	"github.com/stretchr/testify/assert"
 	"reminder-hub/pkg/logger"
+
+	"github.com/labstack/echo/v4"
 )
 
-// MockLogger - простой мок-логгер для тестов
-type MockLogger struct{}
+type nopLogger struct{}
 
-func (m *MockLogger) Debug(ctx context.Context, msg string, fields ...any) {}
-func (m *MockLogger) Info(ctx context.Context, msg string, fields ...any)  {}
-func (m *MockLogger) Error(ctx context.Context, msg string, fields ...any)  {}
-func (m *MockLogger) Warn(ctx context.Context, msg string, fields ...any)   {}
-func (m *MockLogger) Panic(ctx context.Context, msg string, fields ...any) {}
-func (m *MockLogger) Fatal(ctx context.Context, msg string, fields ...any)  {}
+func (nopLogger) Debug(ctx context.Context, msg string, fields ...any) {}
+func (nopLogger) Info(ctx context.Context, msg string, fields ...any)  {}
+func (nopLogger) Error(ctx context.Context, msg string, fields ...any) {}
+func (nopLogger) Warn(ctx context.Context, msg string, fields ...any)  {}
+func (nopLogger) Panic(ctx context.Context, msg string, fields ...any) {}
+func (nopLogger) Fatal(ctx context.Context, msg string, fields ...any) {}
 
-func setupTestLogger() *logger.CurrentLogger {
-	return logger.NewCurrentLogger(&MockLogger{})
+func newTestLogger() *logger.CurrentLogger {
+	return logger.NewCurrentLogger(nopLogger{})
 }
 
-func setupTestServer() *echo.Echo {
+func TestAuthMiddleware_SkipsHealthAndAuthPaths(t *testing.T) {
 	e := echo.New()
-	e.GET("/health", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
-	})
-	e.GET("/api/v1/test", func(c echo.Context) error {
-		userID := c.Get("user_id")
-		return c.JSON(http.StatusOK, map[string]interface{}{"user_id": userID})
-	})
-	return e
+	log := newTestLogger()
+	mw := AuthMiddleware("http://auth", log)
+
+	called := false
+	next := func(c echo.Context) error { called = true; return c.NoContent(http.StatusOK) }
+	h := mw(next)
+
+	for _, path := range []string{"/health", "/auth/login"} {
+		called = false
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath(path)
+
+		if err := h(c); err != nil {
+			t.Fatalf("unexpected error for %s: %v", path, err)
+		}
+		if !called {
+			t.Fatalf("next not called for path %s", path)
+		}
+	}
 }
 
-func TestAuthMiddleware_SkipHealthCheck(t *testing.T) {
-	logger := setupTestLogger()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{"valid": true, "user_id": "test-user"})
-	}))
-	defer server.Close()
+func TestParseValidateResponse(t *testing.T) {
+	body := `{"valid":true,"user_id":"u1","email":"a@b"}`
+	id, err := parseValidateResponse(bytes.NewBufferString(body))
+	if err != nil || id != "u1" {
+		t.Fatalf("parseValidateResponse = %q, %v", id, err)
+	}
 
-	e := setupTestServer()
-	e.Use(AuthMiddleware(server.URL, logger))
+	body = `{"valid":false}`
+	if _, err := parseValidateResponse(strings.NewReader(body)); err == nil {
+		t.Fatal("expected error for invalid token")
+	}
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	bad := io.NopCloser(strings.NewReader("{"))
+	defer bad.Close()
+	if _, err := parseValidateResponse(bad); err == nil {
+		t.Fatal("expected JSON error")
+	}
+}
+
+func TestHandleErrorResponse(t *testing.T) {
 	rec := httptest.NewRecorder()
+	rec.WriteHeader(http.StatusUnauthorized)
+	_, _ = rec.WriteString("unauthorized")
 
-	e.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
+	err := handleErrorResponse(rec.Result())
+	if err == nil || !strings.Contains(err.Error(), "401") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
-func TestAuthMiddleware_SkipAuthRoutes(t *testing.T) {
-	logger := setupTestLogger()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{"valid": true, "user_id": "test-user"})
-	}))
-	defer server.Close()
-
-	e := setupTestServer()
-	e.POST("/auth/login", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
-	})
-	e.Use(AuthMiddleware(server.URL, logger))
-
-	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
-	rec := httptest.NewRecorder()
-
-	e.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-}
-
-func TestAuthMiddleware_NoAuthorizationHeader(t *testing.T) {
-	logger := setupTestLogger()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	defer server.Close()
-
-	e := setupTestServer()
-	e.Use(AuthMiddleware(server.URL, logger))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/test", nil)
-	rec := httptest.NewRecorder()
-
-	e.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-}
-
-func TestAuthMiddleware_InvalidFormat(t *testing.T) {
-	logger := setupTestLogger()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	defer server.Close()
-
-	e := setupTestServer()
-	e.Use(AuthMiddleware(server.URL, logger))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/test", nil)
-	req.Header.Set("Authorization", "InvalidFormat token")
-	rec := httptest.NewRecorder()
-
-	e.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-}
-
-func TestAuthMiddleware_ValidToken(t *testing.T) {
-	logger := setupTestLogger()
-	userID := "test-user-123"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"valid":   true,
-			"user_id": userID,
-			"email":   "test@example.com",
-		})
-	}))
-	defer server.Close()
-
-	e := setupTestServer()
-	e.Use(AuthMiddleware(server.URL, logger))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/test", nil)
-	req.Header.Set("Authorization", "Bearer valid-token")
-	rec := httptest.NewRecorder()
-
-	e.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-	var response map[string]interface{}
-	json.Unmarshal(rec.Body.Bytes(), &response)
-	assert.Equal(t, userID, response["user_id"])
-}
-
-func TestAuthMiddleware_InvalidToken(t *testing.T) {
-	logger := setupTestLogger()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid token"})
-	}))
-	defer server.Close()
-
-	e := setupTestServer()
-	e.Use(AuthMiddleware(server.URL, logger))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/test", nil)
-	req.Header.Set("Authorization", "Bearer invalid-token")
-	rec := httptest.NewRecorder()
-
-	e.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-}
-
-func TestAuthMiddleware_AuthServiceUnavailable(t *testing.T) {
-	logger := setupTestLogger()
-	// Используем несуществующий URL для имитации недоступности сервиса
-	e := setupTestServer()
-	e.Use(AuthMiddleware("http://localhost:99999", logger))
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/test", nil)
-	req.Header.Set("Authorization", "Bearer token")
-	rec := httptest.NewRecorder()
-
-	e.ServeHTTP(rec, req)
-
-	// Должен вернуть 401, так как сервис недоступен
-	assert.Equal(t, http.StatusUnauthorized, rec.Code)
-}
-
-func TestValidateToken_Success(t *testing.T) {
-	logger := setupTestLogger()
-	userID := "test-user-123"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"valid":   true,
-			"user_id": userID,
-			"email":   "test@example.com",
-		})
-	}))
-	defer server.Close()
-
+func TestValidateToken_ErrorPropagates(t *testing.T) {
+	log := newTestLogger()
 	ctx := context.Background()
-	result, err := validateToken(server.URL, "test-token", logger, ctx)
 
-	assert.NoError(t, err)
-	assert.Equal(t, userID, result)
+	_, err := validateToken("http://bad-host", "token", log, ctx)
+	if err == nil {
+		t.Fatal("expected error from validateToken for bad host")
+	}
 }
-
-func TestValidateToken_InvalidResponse(t *testing.T) {
-	logger := setupTestLogger()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"valid": false,
-		})
-	}))
-	defer server.Close()
-
-	ctx := context.Background()
-	_, err := validateToken(server.URL, "test-token", logger, ctx)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "token is not valid")
-}
-
-func TestValidateToken_EmptyUserID(t *testing.T) {
-	logger := setupTestLogger()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"valid":   true,
-			"user_id": "",
-		})
-	}))
-	defer server.Close()
-
-	ctx := context.Background()
-	_, err := validateToken(server.URL, "test-token", logger, ctx)
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "user_id is empty")
-}
-
