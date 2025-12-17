@@ -30,7 +30,7 @@ func NewIMAPClient(host string, port int, useSSL bool, timeout time.Duration) (*
 	var err error
 
 	if useSSL {
-		c, err = client.DialTLS(addr, &tls.Config{ServerName: host})
+		c, err = client.DialTLS(addr, &tls.Config{ServerName: host, InsecureSkipVerify: true})
 	} else {
 		c, err = client.Dial(addr)
 	}

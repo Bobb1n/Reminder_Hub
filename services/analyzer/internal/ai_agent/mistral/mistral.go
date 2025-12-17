@@ -18,7 +18,7 @@ import (
 )
 
 type MistralConfig struct {
-	api     string        `env:"API"`
+	api     string        `env:"MISTRAL_API_KEY"`
 	model   string        `env:"MODEL" env-default:"open-mistral-7b"`
 	timeout time.Duration `env:"TIMEOUT" env-default:"30s"`
 	retries int           `env:"RETRIES" env-default:"3"`
@@ -44,7 +44,7 @@ func NewMistralConn(ctx context.Context, cfg *MistralConfig, log *logger.Current
 
 	if cfg.api == "" {
 		log.Error(ctx, "Mistral API key is empty")
-		return nil, errors.New("Mistral API key is required")
+		return nil, errors.New("mistral API key is required")
 	}
 	if cfg.model == "" {
 		cfg.model = "open-mistral-7b"

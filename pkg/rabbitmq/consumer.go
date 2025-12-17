@@ -37,6 +37,8 @@ func (c *Consumer[T]) ConsumeMessage(msg interface{}, dependencies T) error {
 	typeName := reflect.TypeOf(msg).Name()
 	snakeTypeName := strcase.ToSnake(typeName)
 
+	c.log.Info(context.Background(), "SnakeTyepName of Consumer: ", snakeTypeName)
+
 	err = ch.ExchangeDeclare(
 		snakeTypeName, // name
 		c.cfg.Kind,    // type
@@ -141,7 +143,7 @@ func (c *Consumer[T]) ConsumeMessage(msg interface{}, dependencies T) error {
 		}
 
 	}()
-	c.log.Info(c.ctx, "Waiting for messages in queue :%s. To exit press CTRL+C", q.Name)
+	c.log.Info(c.ctx, "Waiting for messages.", "queue", q.Name)
 
 	return nil
 }

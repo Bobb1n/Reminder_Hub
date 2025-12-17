@@ -11,21 +11,10 @@ import (
 	"github.com/streadway/amqp"
 )
 
-type EmailMessage struct {
-	EmailID       string `json:"email_id"`
-	UserID        string `json:"user_id"`
-	MessageID     string `json:"message_id"`
-	FromAddress   string `json:"from_address"`
-	Subject       string `json:"subject"`
-	BodyText      string `json:"body_text"`
-	DateReceived  string `json:"date_received"`
-	SyncTimestamp string `json:"sync_timestamp"`
-}
-
 type EmailBatchMessage struct {
-	Emails        []*EmailMessage `json:"emails"`
-	BatchSize     int             `json:"batch_size"`
-	SyncTimestamp string          `json:"sync_timestamp"`
+	Emails        *models.RawEmails `json:"emails"`
+	BatchSize     int               `json:"batch_size"`
+	SyncTimestamp string            `json:"sync_timestamp"`
 }
 
 type Producer struct {
@@ -43,37 +32,35 @@ func (p *Producer) Close() error {
 	return nil
 }
 
-func (p *Producer) PublishEmail(message *EmailMessage) error {
+func (p *Producer) PublishEmail(message *models.RawEmail) error {
 	return p.publisher.PublishMessage(message)
 }
 
-func (p *Producer) PublishEmailBatch(messages []*EmailMessage) error {
-	if len(messages) == 0 {
+func (p *Producer) PublishEmailBatch(messages *models.RawEmails) error {
+	if len(messages.RawEmail) == 0 {
 		return nil
 	}
 
-	// Преобразуем EmailMessage в RawEmail для совместимости с analyzer-service
-	rawEmails := make([]models.RawEmail, 0, len(messages))
-	for _, msg := range messages {
-		dateReceived, err := time.Parse(time.RFC3339, msg.DateReceived)
-		if err != nil {
-			// Если не удалось распарсить, используем текущее время
-			dateReceived = time.Now()
+	rawEmails := make([]models.RawEmail, 0, len(messages.RawEmail))
+	for _, msg := range messages.RawEmail {
+		// Проверяем и форматируем дату, если нужно
+		dateReceived := msg.Date
+		if dateReceived == "" {
+			dateReceived = time.Now().Format(time.RFC3339)
 		}
-		
-		syncTimestamp, err := time.Parse(time.RFC3339, msg.SyncTimestamp)
-		if err != nil {
-			// Если не удалось распарсить, используем текущее время
-			syncTimestamp = time.Now()
+
+		syncTimestamp := msg.TimeStamp
+		if syncTimestamp == "" {
+			syncTimestamp = time.Now().Format(time.RFC3339)
 		}
 
 		rawEmail := models.RawEmail{
 			EmailID:   msg.EmailID,
 			UserID:    msg.UserID,
 			MessageID: msg.MessageID,
-			From:      msg.FromAddress,
+			From:      msg.From,
 			Subject:   msg.Subject,
-			Text:      msg.BodyText,
+			Text:      msg.Text,
 			Date:      dateReceived,
 			TimeStamp: syncTimestamp,
 		}

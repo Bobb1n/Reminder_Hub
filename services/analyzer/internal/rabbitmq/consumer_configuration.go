@@ -9,11 +9,13 @@ import (
 	"reminder-hub/services/analyzer/internal/shared/delivery"
 
 	"github.com/streadway/amqp"
+	"go.uber.org/fx"
 )
 
 const numberOfConsumers = 4
 
 func ConfigConsumers(
+	lc fx.Lifecycle,
 	ctx context.Context,
 	log *logger.CurrentLogger,
 	connRabbitmq *amqp.Connection,
@@ -30,14 +32,23 @@ func ConfigConsumers(
 	}
 
 	createProductConsumer := rmq.NewConsumer[*delivery.AnalyzerDeliveryBase](ctx, rabbitmq, connRabbitmq, log, aiagent.ConvertEmail)
-	for i := 0; i < numberOfConsumers; i++ {
-		go func() {
-			err := createProductConsumer.ConsumeMessage(models.RawEmails{}, &inventoryDeliveryBase)
-			if err != nil {
-				log.Error(ctx, "ConfigConsumers error in func ConsumeMessage: ", err)
+	lc.Append(fx.Hook{
+		OnStart: func(startCtx context.Context) error {
+			for i := 0; i < numberOfConsumers; i++ {
+				go func() {
+					err := createProductConsumer.ConsumeMessage(models.RawEmails{}, &inventoryDeliveryBase)
+					if err != nil {
+						log.Error(startCtx, "ConfigConsumers error in func ConsumeMessage: ", err)
+					}
+				}()
 			}
-		}()
-	}
-
+			log.Info(ctx, "RabbitMQ consumers started")
+			return nil
+		},
+		OnStop: func(stopCtx context.Context) error {
+			log.Info(ctx, "RabbitMQ consumers stopping...")
+			return nil
+		},
+	})
 	return nil
 }
