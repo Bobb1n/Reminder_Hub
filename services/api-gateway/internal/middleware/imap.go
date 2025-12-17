@@ -45,19 +45,26 @@ func AutoIMAPMiddleware(log *logger.CurrentLogger) echo.MiddlewareFunc {
 			// Читаем body
 			bodyBytes, err := io.ReadAll(c.Request().Body)
 			if err != nil {
+				log.Error(ctx, "AutoIMAPMiddleware: failed to read body", "error", err)
 				return echo.NewHTTPError(http.StatusBadRequest, "Failed to read request body")
 			}
 			c.Request().Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
+			log.Debug(ctx, "AutoIMAPMiddleware: read body", "length", len(bodyBytes), "content", string(bodyBytes))
+
 			// Парсим JSON
 			var reqBody map[string]interface{}
 			if err := json.Unmarshal(bodyBytes, &reqBody); err != nil {
+				log.Warn(ctx, "AutoIMAPMiddleware: failed to parse JSON", "error", err, "body", string(bodyBytes))
 				return next(c) // Если не JSON, пропускаем
 			}
+
+			log.Debug(ctx, "AutoIMAPMiddleware: parsed JSON", "fields", reqBody)
 
 			// Проверяем, есть ли email_address
 			email, ok := reqBody["email_address"].(string)
 			if !ok || email == "" {
+				log.Debug(ctx, "AutoIMAPMiddleware: no email_address found", "reqBody", reqBody)
 				return next(c) // Если нет email, пропускаем
 			}
 

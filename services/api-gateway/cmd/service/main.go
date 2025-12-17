@@ -63,7 +63,7 @@ func main() {
 		integrations.Any("/*", coreProxy.Proxy)
 
 		reminders := api.Group("/reminders")
-		reminders.Any("/*", coreProxy.Proxy)
+		reminders.Any("/*", collectorProxy.Proxy)
 	}
 
 	internal := e.Group("/internal")

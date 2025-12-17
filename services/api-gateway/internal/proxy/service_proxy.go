@@ -18,6 +18,7 @@ type ServiceProxy struct {
 	targetURL     *url.URL
 	internalToken string
 	logger        *logger.CurrentLogger
+	serviceType   string
 }
 
 func NewServiceProxy(targetURL, internalToken string, log *logger.CurrentLogger) (*ServiceProxy, error) {
@@ -26,10 +27,16 @@ func NewServiceProxy(targetURL, internalToken string, log *logger.CurrentLogger)
 		return nil, err
 	}
 
+	serviceType := "core"
+	if strings.Contains(targetURL, "collector") {
+		serviceType = "collector"
+	}
+
 	return &ServiceProxy{
 		targetURL:     parsedURL,
 		internalToken: internalToken,
 		logger:        log,
+		serviceType:   serviceType,
 	}, nil
 }
 
@@ -61,6 +68,15 @@ func (p *ServiceProxy) Proxy(c echo.Context) error {
 				req.URL.Path = "/api/integrations"
 				p.logger.Debug(ctx, "Rewritten path", "method", c.Request().Method, "from", requestPath, "to", "/api/integrations")
 			}
+		}
+
+		// Переписываем путь для reminders -> tasks (только для collector-service)
+		if p.serviceType == "collector" && strings.HasPrefix(requestPath, "/api/v1/reminders") {
+			// Заменяем /api/v1/reminders на /api/v1/tasks
+			// Убираем /reminders из пути
+			newPath := strings.Replace(requestPath, "/reminders", "", 1)
+			req.URL.Path = newPath
+			p.logger.Debug(ctx, "Rewritten path for reminders", "from", requestPath, "to", newPath)
 		}
 
 		// Копируем body из модифицированного запроса (после middleware)
