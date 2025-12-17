@@ -38,7 +38,7 @@ func NewConsumer(url, queueName string, handler MessageHandler) (*Consumer, erro
 
 	err = channel.ExchangeDeclare(
 		"parsed_emails",
-		"direct",
+		"topic",
 		true,
 		false,
 		false,

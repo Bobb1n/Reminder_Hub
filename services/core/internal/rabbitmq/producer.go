@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"reminder-hub/pkg/logger"
+	"reminder-hub/pkg/models"
 	pkgrabbitmq "reminder-hub/pkg/rabbitmq"
 
 	"github.com/streadway/amqp"
@@ -51,11 +52,38 @@ func (p *Producer) PublishEmailBatch(messages []*EmailMessage) error {
 		return nil
 	}
 
-	batchMessage := &EmailBatchMessage{
-		Emails:        messages,
-		BatchSize:     len(messages),
-		SyncTimestamp: time.Now().Format(time.RFC3339),
+	// Преобразуем EmailMessage в RawEmail для совместимости с analyzer-service
+	rawEmails := make([]models.RawEmail, 0, len(messages))
+	for _, msg := range messages {
+		dateReceived, err := time.Parse(time.RFC3339, msg.DateReceived)
+		if err != nil {
+			// Если не удалось распарсить, используем текущее время
+			dateReceived = time.Now()
+		}
+		
+		syncTimestamp, err := time.Parse(time.RFC3339, msg.SyncTimestamp)
+		if err != nil {
+			// Если не удалось распарсить, используем текущее время
+			syncTimestamp = time.Now()
+		}
+
+		rawEmail := models.RawEmail{
+			EmailID:   msg.EmailID,
+			UserID:    msg.UserID,
+			MessageID: msg.MessageID,
+			From:      msg.FromAddress,
+			Subject:   msg.Subject,
+			Text:      msg.BodyText,
+			Date:      dateReceived,
+			TimeStamp: syncTimestamp,
+		}
+		rawEmails = append(rawEmails, rawEmail)
 	}
 
-	return p.publisher.PublishMessage(batchMessage)
+	// Публикуем в формате RawEmails, который ожидает analyzer-service
+	rawEmailsMessage := &models.RawEmails{
+		RawEmail: rawEmails,
+	}
+
+	return p.publisher.PublishMessage(rawEmailsMessage)
 }

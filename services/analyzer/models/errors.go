@@ -21,7 +21,7 @@ func (ae ArraysError) Error() string {
 }
 
 func (ae *ArraysError) Append(err error) {
-	if err != nil {
+	if err == nil {
 		return
 	}
 	ae.Errors = append(ae.Errors, err)

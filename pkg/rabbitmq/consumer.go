@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"reminder-hub/pkg/logger"
 	"sync"
 	"time"
-	"reminder-hub/pkg/logger"
 
 	"github.com/ettle/strcase"
 	"github.com/streadway/amqp"
@@ -33,9 +33,7 @@ func (c *Consumer[T]) ConsumeMessage(msg interface{}, dependencies T) error {
 		c.log.Error(c.ctx, "Error in opening channel to consume message", err)
 		return err
 	}
-	//For different services it will be different typeNames:
-	//- For AnalyzerService it must be RawEmails
-	//- For For CollectorService it must be ParsedEmails
+
 	typeName := reflect.TypeOf(msg).Name()
 	snakeTypeName := strcase.ToSnake(typeName)
 
@@ -97,20 +95,19 @@ func (c *Consumer[T]) ConsumeMessage(msg interface{}, dependencies T) error {
 	savedCtx := c.ctx
 	go func() {
 		defer func(ch *amqp.Channel) {
-			err := ch.Close()
-			if err != nil {
-				c.log.Error(savedCtx, "failed to close channel. Closed for queue: %s", q.Name)
+			// Пытаемся закрыть канал, но не падаем если он уже закрыт
+			if err := ch.Close(); err != nil {
+				c.log.Debug(savedCtx, "Channel already closed or error closing", "queue", q.Name, "error", err)
 			}
 		}(ch)
 		for {
 			select {
 			case <-c.ctx.Done():
-				c.log.Info(savedCtx, "channel closed for for queue: %s", q.Name)
+				c.log.Info(savedCtx, "Context cancelled, closing channel for queue", "queue", q.Name)
 				return
 			case delivery, ok := <-deliveries:
 				if !ok {
-					c.log.Error(savedCtx, "NOT OK deliveries channel closed for queue: %s", q.Name)
-					ch.Close()
+					c.log.Info(savedCtx, "Deliveries channel closed for queue", "queue", q.Name)
 					return
 				}
 
@@ -118,19 +115,28 @@ func (c *Consumer[T]) ConsumeMessage(msg interface{}, dependencies T) error {
 				//For Collector it will be function, which stores values into DB
 				err := c.handler(q.Name, delivery, dependencies)
 				if err != nil {
-					c.log.Error(savedCtx, err.Error())
-					delivery.Nack(false, true)
-				} else {
-					c.mu.Lock()
-					c.consumedMessages[snakeTypeName] = true
-					c.mu.Unlock()
+					c.log.Error(savedCtx, "Handler error", "error", err, "error_string", err.Error())
+					// Пытаемся сделать Nack, но не падаем если канал уже закрыт
+					if nackErr := delivery.Nack(false, true); nackErr != nil {
+						c.log.Warn(savedCtx, "Failed to Nack delivery", "error", nackErr)
+					}
+					continue
 				}
 
-				err = delivery.Ack(false)
-				if err != nil {
-					c.log.Error(savedCtx, "We didn't get a ack for delivery: %v", string(delivery.Body))
-					delivery.Nack(false, true)
+				// Если обработка успешна, делаем Ack
+				if ackErr := delivery.Ack(false); ackErr != nil {
+					c.log.Error(savedCtx, "Failed to Ack delivery", "error", ackErr)
+					// Если Ack не удался, пытаемся сделать Nack
+					if nackErr := delivery.Nack(false, true); nackErr != nil {
+						c.log.Warn(savedCtx, "Failed to Nack delivery after Ack error", "error", nackErr)
+					}
+					continue
 				}
+
+				// Отмечаем сообщение как обработанное только после успешного Ack
+				c.mu.Lock()
+				c.consumedMessages[snakeTypeName] = true
+				c.mu.Unlock()
 			}
 		}
 
@@ -176,5 +182,3 @@ func NewConsumer[T any](ctx context.Context, cfg *RabbitMQConfig, conn *amqp.Con
 		consumedMessages: make(map[string]bool),
 		mu:               sync.Mutex{}}
 }
-
-

@@ -138,8 +138,6 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-    ports:
-      - "8082:8082"
     restart: on-failure
 
   # --- Analyzer Service ---
@@ -155,6 +153,7 @@ services:
       - RABBITMQ_PORT=5672
       - RABBITMQ_USER=${RABBITMQ_USER:-guest}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASS:-guest}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     depends_on:
       rabbitmq:
         condition: service_healthy

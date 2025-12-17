@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"sync"
-	"time"
 	"reminder-hub/pkg/logger"
 	"reminder-hub/pkg/models"
 	"reminder-hub/services/analyzer/internal/shared/delivery"
 	modan "reminder-hub/services/analyzer/models"
+	"sync"
+	"time"
 
-	"github.com/labstack/gommon/log"
 	"github.com/streadway/amqp"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/mistral"
@@ -25,6 +24,16 @@ type MistralConfig struct {
 	retries int           `env:"RETRIES" env-default:"3"`
 }
 
+// API возвращает API ключ
+func (c *MistralConfig) API() string {
+	return c.api
+}
+
+// SetAPI устанавливает API ключ
+func (c *MistralConfig) SetAPI(apiKey string) {
+	c.api = apiKey
+}
+
 type MistralAgent struct {
 	llm *mistral.Model
 }
@@ -32,6 +41,17 @@ type MistralAgent struct {
 const numberOfWorkers = 4
 
 func NewMistralConn(ctx context.Context, cfg *MistralConfig, log *logger.CurrentLogger) (*MistralAgent, error) {
+
+	if cfg.api == "" {
+		log.Error(ctx, "Mistral API key is empty")
+		return nil, errors.New("Mistral API key is required")
+	}
+	if cfg.model == "" {
+		cfg.model = "open-mistral-7b"
+	}
+
+	log.Info(ctx, "Connecting to Mistral", "model", cfg.model, "api_key_set", cfg.api != "")
+
 	llm, err := mistral.New(
 		mistral.WithAPIKey(cfg.api),
 		mistral.WithModel(cfg.model),
@@ -40,7 +60,7 @@ func NewMistralConn(ctx context.Context, cfg *MistralConfig, log *logger.Current
 	)
 
 	if err != nil {
-		log.Error(ctx, "Failed to connect to Mistral %v", err)
+		log.Error(ctx, "Failed to connect to Mistral", "error", err, "model", cfg.model)
 		return nil, err
 	}
 
@@ -48,7 +68,7 @@ func NewMistralConn(ctx context.Context, cfg *MistralConfig, log *logger.Current
 }
 
 func (ma *MistralAgent) ConvertEmail(ctx context.Context, queue string, msg amqp.Delivery, dependencies *delivery.AnalyzerDeliveryBase) error {
-	log.Infof("Message received on queue: %s with message: %s", queue, string(msg.Body))
+	dependencies.Log.Info(ctx, "Message received on queue", "queue", queue, "message_size", len(msg.Body))
 
 	var RawEmails models.RawEmails
 
@@ -58,8 +78,8 @@ func (ma *MistralAgent) ConvertEmail(ctx context.Context, queue string, msg amqp
 		return err
 	}
 
-	jobChan := make(chan models.RawEmail, numberOfWorkers)
-	errChan := make(chan error, numberOfWorkers)
+	jobChan := make(chan models.RawEmail, len(RawEmails.RawEmail))
+	errChan := make(chan error, len(RawEmails.RawEmail))
 	var wg sync.WaitGroup
 	prompt := prompts.NewChatPromptTemplate([]prompts.MessageFormatter{
 		prompts.NewSystemMessagePromptTemplate(
@@ -92,59 +112,85 @@ func (ma *MistralAgent) ConvertEmail(ctx context.Context, queue string, msg amqp
 			[]string{"subject", "body"},
 		),
 	})
-	for i := 0; i < numberOfWorkers; i++ {
+
+	for _, re := range RawEmails.RawEmail {
+		jobChan <- re
+	}
+	close(jobChan)
+
+	// Создаем worker'ов, которые читают из jobChan
+	workerCount := numberOfWorkers
+	if len(RawEmails.RawEmail) < numberOfWorkers {
+		workerCount = len(RawEmails.RawEmail)
+	}
+
+	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
-		go func(val int) {
+		go func() {
 			defer wg.Done()
-			result, err := prompt.Format(map[string]any{
-				"subject": RawEmails.RawEmail[i].Subject,
-				"body":    RawEmails.RawEmail[i].Text,
-			})
-			if err != nil {
-				errChan <- err
-			}
-			resp, err := ma.llm.GenerateContent(context.Background(),
-				[]llms.MessageContent{
-					llms.TextParts(llms.ChatMessageTypeHuman, result),
-				}, llms.WithJSONMode())
-			if err != nil {
-				if errors.Is(err, llms.ErrRateLimit) {
-					// Handle rate limiting
-					time.Sleep(time.Second * 10)
-					// Retry...
-				} else if errors.Is(err, llms.ErrQuotaExceeded) {
-					// Handle quota exceeded
-					log.Error("API quota exceeded")
+			for rawEmail := range jobChan {
+				result, err := prompt.Format(map[string]any{
+					"subject": rawEmail.Subject,
+					"body":    rawEmail.Text,
+				})
+				if err != nil {
 					errChan <- err
-				} else {
-					// Handle other errors
+					continue
+				}
+				resp, err := ma.llm.GenerateContent(ctx,
+					[]llms.MessageContent{
+						llms.TextParts(llms.ChatMessageTypeHuman, result),
+					}, llms.WithJSONMode())
+				if err != nil {
+					dependencies.Log.Error(ctx, "Mistral API error", "error", err, "email_id", rawEmail.EmailID)
+					if errors.Is(err, llms.ErrRateLimit) {
+						// Handle rate limiting
+						time.Sleep(time.Second * 10)
+						// Retry...
+					} else if errors.Is(err, llms.ErrQuotaExceeded) {
+						// Handle quota exceeded
+						dependencies.Log.Error(ctx, "API quota exceeded", "email_id", rawEmail.EmailID)
+						errChan <- err
+					} else {
+						// Handle other errors (including 400 Bad Request)
+						errChan <- err
+					}
+					continue
+				}
+
+				// Проверяем, что есть ответ
+				if len(resp.Choices) == 0 {
+					err := errors.New("empty response from Mistral API")
+					dependencies.Log.Error(ctx, "Empty response from Mistral", "email_id", rawEmail.EmailID)
+					errChan <- err
+					continue
+				}
+
+				content := resp.Choices[0].Content
+				temp := struct {
+					Title       string    `json:"title"`
+					Description string    `json:"description"`
+					Deadline    time.Time `json:"deadline"`
+				}{}
+				if err := json.Unmarshal([]byte(content), &temp); err != nil {
+					dependencies.Log.Error(ctx, "Failed to parse Mistral response", "error", err, "email_id", rawEmail.EmailID, "content", content)
+					errChan <- err
+					continue
+				}
+
+				var ParsedEmails models.ParsedEmails
+				ParsedEmails.UserID = rawEmail.UserID
+				ParsedEmails.EmailID = rawEmail.EmailID
+				ParsedEmails.Title = temp.Title
+				ParsedEmails.Description = temp.Description
+				ParsedEmails.Deadline = temp.Deadline
+				ParsedEmails.From = rawEmail.From
+				err = dependencies.RabbitmqPublisher.PublishMessage(&ParsedEmails)
+				if err != nil {
 					errChan <- err
 				}
 			}
-
-			content := resp.Choices[0].Content
-			temp := struct {
-				Title       string    `json:"title"`
-				Description string    `json:"description"`
-				Deadline    time.Time `json:"dealine"`
-			}{}
-			if err := json.Unmarshal([]byte(content), &temp); err != nil {
-				log.Error("Ai_agent/mistral: Не удалось распарсить данные", err)
-				errChan <- err
-			}
-
-			var ParsedEmails models.ParsedEmails
-			ParsedEmails.UserID = RawEmails.RawEmail[i].UserID
-			ParsedEmails.EmailID = RawEmails.RawEmail[i].EmailID
-			ParsedEmails.Title = temp.Title
-			ParsedEmails.Description = temp.Description
-			ParsedEmails.Deadline = temp.Deadline
-			ParsedEmails.From = RawEmails.RawEmail[i].From
-			err = dependencies.RabbitmqPublisher.PublishMessage(ParsedEmails)
-			if err != nil {
-				errChan <- err
-			}
-		}(i)
+		}()
 	}
 
 	go func() {
@@ -152,15 +198,18 @@ func (ma *MistralAgent) ConvertEmail(ctx context.Context, queue string, msg amqp
 		close(errChan)
 	}()
 
-	for _, re := range RawEmails.RawEmail {
-		jobChan <- re
-	}
-	close(jobChan)
-
-	ArraysError := modan.ArraysError{}
+	arraysError := &modan.ArraysError{}
 	for err := range errChan {
-		log.Error(ctx, "email convert error: %v", err)
+		if err != nil {
+			dependencies.Log.Error(ctx, "email convert error", "error", err)
+			arraysError.Append(err)
+		}
 	}
 
-	return ArraysError
+	// Возвращаем ошибку только если есть ошибки
+	if len(arraysError.Errors) > 0 {
+		return arraysError
+	}
+
+	return nil
 }

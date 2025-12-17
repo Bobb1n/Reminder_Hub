@@ -45,8 +45,13 @@ func InitConfig(fx fx.Lifecycle) (*Config, *logger.CurrentLogger, *echoserver.Ec
 		return nil, nil, nil, nil, nil, fmt.Errorf("failed to parse config %w", err)
 	}
 
-	// Явно парсим RabbitMQ конфигурацию с fallback на переменные окружения
 	cfg.Rabbitmq = parseRabbitMQConfig()
+
+	if cfg.MistralConfig != nil {
+		if openAIKey := os.Getenv("OPENAI_API_KEY"); openAIKey != "" {
+			cfg.MistralConfig.SetAPI(openAIKey)
+		}
+	}
 
 	adapter := zaplogger.NewLoggerAdapter(fx, cfg.Environment)
 
@@ -55,7 +60,6 @@ func InitConfig(fx fx.Lifecycle) (*Config, *logger.CurrentLogger, *echoserver.Ec
 	return cfg, logger.NewCurrentLogger(adapter), cfg.Echo, cfg.Rabbitmq, cfg.MistralConfig, nil
 }
 
-// parseRabbitMQConfig парсит конфигурацию RabbitMQ из переменных окружения с fallback на значения по умолчанию
 func parseRabbitMQConfig() *rabbitmq.RabbitMQConfig {
 	port := 5672
 	if portStr := os.Getenv("RABBITMQ_PORT"); portStr != "" {
@@ -74,7 +78,6 @@ func parseRabbitMQConfig() *rabbitmq.RabbitMQConfig {
 	}
 }
 
-// getEnvOrDefault возвращает значение переменной окружения или значение по умолчанию
 func getEnvOrDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value

@@ -38,11 +38,11 @@ func (p *Publisher) PublishMessage(msg interface{}) error {
 		p.log.Error(p.ctx, "Error in marshalling message to publish message %v", err)
 		return err
 	}
-	//For different services it will be different typeNames:
-	//- For CoreService it must be RawEmails
-	//- For AnalyzerService it must be ParsedEmails
+
 	typeName := reflect.TypeOf(msg).Elem().Name()
 	snakeTypeName := strcase.ToSnake(typeName)
+
+	p.log.Debug(p.ctx, "Publishing message", "type", typeName, "exchange", snakeTypeName, "kind", p.cfg.Kind)
 
 	channel, err := p.conn.Channel()
 	if err != nil {
@@ -63,9 +63,11 @@ func (p *Publisher) PublishMessage(msg interface{}) error {
 	)
 
 	if err != nil {
-		p.log.Error(p.ctx, "Error in declaring exchange to publish message")
+		p.log.Error(p.ctx, "Error in declaring exchange to publish message", "exchange", snakeTypeName, "error", err)
 		return err
 	}
+
+	p.log.Debug(p.ctx, "Exchange declared", "exchange", snakeTypeName)
 
 	correlationId := ""
 
@@ -85,13 +87,13 @@ func (p *Publisher) PublishMessage(msg interface{}) error {
 	err = channel.Publish(snakeTypeName, snakeTypeName, false, false, publishingMsg)
 
 	if err != nil {
-		p.log.Error(p.ctx, "Error in publishing message")
+		p.log.Error(p.ctx, "Error in publishing message", "exchange", snakeTypeName, "routing_key", snakeTypeName, "error", err)
 		return err
 	}
 	p.mu.Lock()
 	p.publishedMessages[snakeTypeName] = true
 	p.mu.Unlock()
-	p.log.Info(p.ctx, "Published message: %s", publishingMsg.Body)
+	p.log.Info(p.ctx, "Published message successfully", "exchange", snakeTypeName, "routing_key", snakeTypeName, "message_id", publishingMsg.MessageId, "body_size", len(publishingMsg.Body))
 	return nil
 }
 
