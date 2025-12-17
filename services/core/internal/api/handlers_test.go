@@ -16,6 +16,8 @@ import (
 
 type mockDB struct{
 	createIntegrationFunc func(ctx context.Context, integration *database.EmailIntegration) error
+	getUserIntegrationsFunc func(ctx context.Context, userID string) ([]database.EmailIntegration, error)
+	deleteIntegrationFunc func(ctx context.Context, userID, integrationID string) error
 }
 
 func (m *mockDB) CreateIntegration(ctx context.Context, integration *database.EmailIntegration) error {
@@ -26,9 +28,16 @@ func (m *mockDB) CreateIntegration(ctx context.Context, integration *database.Em
 }
 
 func (m *mockDB) GetUserIntegrations(ctx context.Context, userID string) ([]database.EmailIntegration, error) {
+	if m.getUserIntegrationsFunc != nil {
+		return m.getUserIntegrationsFunc(ctx, userID)
+	}
 	return nil, nil
 }
+
 func (m *mockDB) DeleteIntegration(ctx context.Context, userID, integrationID string) error {
+	if m.deleteIntegrationFunc != nil {
+		return m.deleteIntegrationFunc(ctx, userID, integrationID)
+	}
 	return nil
 }
 func (m *mockDB) GetIntegrationsForSync(ctx context.Context, limit int) ([]database.EmailIntegration, error) {
@@ -121,5 +130,74 @@ func TestBindAndValidate_InvalidBody(t *testing.T) {
 	var r database.CreateIntegrationRequest
 	if err := bindAndValidate(c, &r); err == nil {
 		t.Fatal("expected error on invalid body (empty)")
+	}
+}
+
+func TestHandler_GetUserIntegrations_Success(t *testing.T) {
+	log := corelogger.Init("test")
+	mdb := &mockDB{}
+	mdb.createIntegrationFunc = nil
+	mdb.getUserIntegrationsFunc = func(ctx context.Context, userID string) ([]database.EmailIntegration, error) {
+		return []database.EmailIntegration{
+			{ID: "123", UserID: userID, EmailAddress: "test@example.com"},
+		}, nil
+	}
+	h := NewHandler(mdb, &mockEncryptor{}, log)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/integrations/user-id", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("user_id")
+	c.SetParamValues("123e4567-e89b-12d3-a456-426614174000")
+
+	if err := h.GetUserIntegrations(c); err != nil {
+		t.Fatalf("GetUserIntegrations error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func TestHandler_GetUserIntegrations_InvalidUUID(t *testing.T) {
+	log := corelogger.Init("test")
+	h := NewHandler(&mockDB{}, &mockEncryptor{}, log)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/integrations/invalid", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("user_id")
+	c.SetParamValues("invalid-uuid")
+
+	if err := h.GetUserIntegrations(c); err != nil {
+		t.Fatalf("GetUserIntegrations error: %v", err)
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandler_DeleteIntegration_Success(t *testing.T) {
+	log := corelogger.Init("test")
+	mdb := &mockDB{}
+	mdb.deleteIntegrationFunc = func(ctx context.Context, userID, integrationID string) error {
+		return nil
+	}
+	h := NewHandler(mdb, &mockEncryptor{}, log)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodDelete, "/api/integrations/123", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("123e4567-e89b-12d3-a456-426614174000")
+	c.Set(ContextKeyUserID, "user-id")
+
+	if err := h.DeleteIntegration(c); err != nil {
+		t.Fatalf("DeleteIntegration error: %v", err)
+	}
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNoContent)
 	}
 }

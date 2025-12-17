@@ -6,6 +6,7 @@ import (
 	"errors"
 	"reminder-hub/pkg/logger"
 	"reminder-hub/pkg/models"
+	"reminder-hub/pkg/resilience"
 	"reminder-hub/services/analyzer/internal/shared/delivery"
 	modan "reminder-hub/services/analyzer/models"
 	"sync"
@@ -35,7 +36,9 @@ func (c *MistralConfig) SetAPI(apiKey string) {
 }
 
 type MistralAgent struct {
-	llm *mistral.Model
+	llm            *mistral.Model
+	circuitBreaker *resilience.CircuitBreaker
+	retryConfig    resilience.RetryConfig
 }
 
 const numberOfWorkers = 4
@@ -64,7 +67,22 @@ func NewMistralConn(ctx context.Context, cfg *MistralConfig, log *logger.Current
 		return nil, err
 	}
 
-	return &MistralAgent{llm: llm}, nil
+	// Инициализируем circuit breaker: максимум 5 ошибок подряд, затем 30 секунд ожидания
+	circuitBreaker := resilience.NewCircuitBreaker(5, 30*time.Second)
+
+	// Настройки retry: 3 попытки, экспоненциальная задержка от 1 до 10 секунд
+	retryConfig := resilience.RetryConfig{
+		MaxAttempts:  3,
+		InitialDelay: 1 * time.Second,
+		MaxDelay:     10 * time.Second,
+		Multiplier:   2.0,
+	}
+
+	return &MistralAgent{
+		llm:            llm,
+		circuitBreaker: circuitBreaker,
+		retryConfig:    retryConfig,
+	}, nil
 }
 
 func (ma *MistralAgent) ConvertEmail(ctx context.Context, queue string, msg amqp.Delivery, dependencies *delivery.AnalyzerDeliveryBase) error {
@@ -137,23 +155,61 @@ func (ma *MistralAgent) ConvertEmail(ctx context.Context, queue string, msg amqp
 					errChan <- err
 					continue
 				}
-				resp, err := ma.llm.GenerateContent(ctx,
-					[]llms.MessageContent{
-						llms.TextParts(llms.ChatMessageTypeHuman, result),
-					}, llms.WithJSONMode())
-				if err != nil {
-					dependencies.Log.Error(ctx, "Mistral API error", "error", err, "email_id", rawEmail.EmailID)
-					if errors.Is(err, llms.ErrRateLimit) {
-						// Handle rate limiting
-						time.Sleep(time.Second * 10)
-						// Retry...
-					} else if errors.Is(err, llms.ErrQuotaExceeded) {
-						// Handle quota exceeded
+				// Используем circuit breaker и retry для вызова API
+				var resp *llms.ContentResponse
+				var apiErr error
+
+				circuitErr := ma.circuitBreaker.Execute(ctx, func() error {
+					return resilience.Retry(ctx, ma.retryConfig, func() error {
+						var retryErr error
+						resp, retryErr = ma.llm.GenerateContent(ctx,
+							[]llms.MessageContent{
+								llms.TextParts(llms.ChatMessageTypeHuman, result),
+							}, llms.WithJSONMode())
+
+						// Повторяем только для retryable ошибок
+						if retryErr != nil && resilience.IsRetryableError(retryErr) {
+							dependencies.Log.Warn(ctx, "Retrying Mistral API call", "error", retryErr, "email_id", rawEmail.EmailID)
+							return retryErr
+						}
+
+						apiErr = retryErr
+						return retryErr
+					})
+				})
+
+				// Если circuit breaker вернул ошибку, используем её
+				if circuitErr != nil {
+					apiErr = circuitErr
+				}
+
+				if apiErr != nil {
+					dependencies.Log.Error(ctx, "Mistral API error after retries", "error", apiErr, "email_id", rawEmail.EmailID)
+
+					// Fallback: создаем базовую структуру вместо полного провала
+					if ma.circuitBreaker.State() == resilience.StateOpen {
+						dependencies.Log.Warn(ctx, "Circuit breaker is open, using fallback", "email_id", rawEmail.EmailID)
+						// Публикуем базовую структуру с данными из исходного письма
+						fallbackParsed := models.ParsedEmails{
+							UserID:      rawEmail.UserID,
+							EmailID:     rawEmail.EmailID,
+							Title:       rawEmail.Subject, // Используем subject как title
+							Description: "Не удалось обработать письмо автоматически",
+							Deadline:    time.Time{}, // Пустой deadline
+							From:        rawEmail.From,
+						}
+						if pubErr := dependencies.RabbitmqPublisher.PublishMessage(&fallbackParsed); pubErr != nil {
+							dependencies.Log.Error(ctx, "Failed to publish fallback message", "error", pubErr, "email_id", rawEmail.EmailID)
+							errChan <- pubErr
+						}
+						continue // Пропускаем это письмо, но не падаем полностью
+					}
+
+					if errors.Is(apiErr, llms.ErrQuotaExceeded) {
 						dependencies.Log.Error(ctx, "API quota exceeded", "email_id", rawEmail.EmailID)
-						errChan <- err
+						errChan <- apiErr
 					} else {
-						// Handle other errors (including 400 Bad Request)
-						errChan <- err
+						errChan <- apiErr
 					}
 					continue
 				}
