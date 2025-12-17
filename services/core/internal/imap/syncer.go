@@ -9,6 +9,7 @@ import (
 	"core/internal/security"
 	"core/internal/util"
 	"reminder-hub/pkg/logger"
+	"reminder-hub/pkg/models"
 )
 
 const maxBatchSize = 7
@@ -36,6 +37,7 @@ func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
 
 	imapClient, err := NewIMAPClient(integration.ImapHost, integration.ImapPort, integration.UseSSL, s.timeout)
 	if err != nil {
+		s.log.Error(ctx, "IMAP client error", "error", err)
 		return errCreateIMAPClient(integration.ImapHost, integration.ImapPort, err)
 	}
 	defer func() {
@@ -45,6 +47,7 @@ func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
 	}()
 
 	if err := imapClient.Login(integration.EmailAddress, pass); err != nil {
+		s.log.Error(ctx, "IMAP login error", "error", err)
 		return errLoginToIMAP(integration.ImapHost, integration.EmailAddress, err)
 	}
 
@@ -68,7 +71,7 @@ func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
 		return nil
 	}
 
-	var currentBatch []*rabbitmq.EmailMessage
+	var currentBatch *models.RawEmails
 	var processed int
 
 	for _, msg := range msgs {
@@ -78,24 +81,27 @@ func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
 			continue
 		}
 		if rabbitMsg != nil {
-			currentBatch = append(currentBatch, rabbitMsg)
+			if currentBatch == nil {
+				currentBatch = &models.RawEmails{}
+			}
+			currentBatch.RawEmail = append(currentBatch.RawEmail, *rabbitMsg)
 			processed++
 
-			if len(currentBatch) >= maxBatchSize {
+			if len(currentBatch.RawEmail) >= maxBatchSize {
 				if err := s.rabbit.PublishEmailBatch(currentBatch); err != nil {
 					return errPublishEmail(integration.ID, err)
 				}
-				s.log.Info(ctx, "Batch published", "batch_size", len(currentBatch))
+				s.log.Info(ctx, "Batch published", "batch_size", len(currentBatch.RawEmail))
 				currentBatch = nil
 			}
 		}
 	}
 
-	if len(currentBatch) > 0 {
+	if len(currentBatch.RawEmail) > 0 {
 		if err := s.rabbit.PublishEmailBatch(currentBatch); err != nil {
 			return errPublishEmail(integration.ID, err)
 		}
-		s.log.Info(ctx, "Final batch published", "batch_size", len(currentBatch))
+		s.log.Info(ctx, "Final batch published", "batch_size", len(currentBatch.RawEmail))
 	}
 
 	if err := s.db.UpdateLastSync(ctx, integration.ID); err != nil {
@@ -106,7 +112,7 @@ func (s *Syncer) SyncIntegration(integration *database.EmailIntegration) error {
 	return nil
 }
 
-func (s *Syncer) processMessage(ctx context.Context, integration *database.EmailIntegration, msg *EmailMessage) (*rabbitmq.EmailMessage, error) {
+func (s *Syncer) processMessage(ctx context.Context, integration *database.EmailIntegration, msg *EmailMessage) (*models.RawEmail, error) {
 
 	exists, err := s.db.EmailExists(ctx, integration.UserID, msg.MessageID)
 	if err != nil {
@@ -136,15 +142,15 @@ func (s *Syncer) processMessage(ctx context.Context, integration *database.Email
 		return nil, errSaveEmail(emailID, err)
 	}
 
-	rabbitMsg := &rabbitmq.EmailMessage{
-		EmailID:       email.ID,
-		UserID:        email.UserID,
-		MessageID:     email.MessageID,
-		FromAddress:   email.FromAddress,
-		Subject:       email.Subject,
-		BodyText:      email.BodyText,
-		DateReceived:  email.DateReceived.Format(time.RFC3339),
-		SyncTimestamp: time.Now().Format(time.RFC3339),
+	rabbitMsg := &models.RawEmail{
+		EmailID:   email.ID,
+		UserID:    email.UserID,
+		MessageID: email.MessageID,
+		From:      email.FromAddress,
+		Subject:   email.Subject,
+		Text:      email.BodyText,
+		Date:      email.DateReceived.Format(time.RFC3339),
+		TimeStamp: time.Now().Format(time.RFC3339),
 	}
 
 	s.log.Info(ctx, "Email processed", "email_id", emailID, "from", msg.From)

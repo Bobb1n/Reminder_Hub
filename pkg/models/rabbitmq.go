@@ -7,14 +7,14 @@ type RawEmails struct {
 }
 
 type RawEmail struct {
-	EmailID   string    `json:"email_id"`
-	UserID    string    `json:"user_id"`
-	MessageID string    `json:"message_id"`
-	From      string    `json:"from_address"`
-	Subject   string    `json:"subject"`
-	Text      string    `json:"body_text"`
-	Date      time.Time `json:"date_received"`
-	TimeStamp time.Time `json:"sync_timestamp"`
+	EmailID   string `json:"email_id"`
+	UserID    string `json:"user_id"`
+	MessageID string `json:"message_id"`
+	From      string `json:"from_address"`
+	Subject   string `json:"subject"`
+	Text      string `json:"body_text"`
+	Date      string `json:"date_received"`
+	TimeStamp string `json:"sync_timestamp"`
 }
 
 type ParsedEmails struct {
@@ -25,5 +25,3 @@ type ParsedEmails struct {
 	Deadline    time.Time `json:"deadline"`
 	From        string    `json:"from_address"`
 }
-
-

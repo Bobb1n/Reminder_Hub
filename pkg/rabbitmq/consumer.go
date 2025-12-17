@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"reminder-hub/pkg/logger"
 	"sync"
 	"time"
-	"reminder-hub/pkg/logger"
 
 	"github.com/ettle/strcase"
 	"github.com/streadway/amqp"
@@ -38,6 +38,8 @@ func (c *Consumer[T]) ConsumeMessage(msg interface{}, dependencies T) error {
 	//- For For CollectorService it must be ParsedEmails
 	typeName := reflect.TypeOf(msg).Name()
 	snakeTypeName := strcase.ToSnake(typeName)
+
+	c.log.Info(context.Background(), "SnakeTyepName of Consumer: ", snakeTypeName)
 
 	err = ch.ExchangeDeclare(
 		snakeTypeName, // name
@@ -135,7 +137,7 @@ func (c *Consumer[T]) ConsumeMessage(msg interface{}, dependencies T) error {
 		}
 
 	}()
-	c.log.Info(c.ctx, "Waiting for messages in queue :%s. To exit press CTRL+C", q.Name)
+	c.log.Info(c.ctx, "Waiting for messages.", "queue", q.Name)
 
 	return nil
 }
@@ -176,5 +178,3 @@ func NewConsumer[T any](ctx context.Context, cfg *RabbitMQConfig, conn *amqp.Con
 		consumedMessages: make(map[string]bool),
 		mu:               sync.Mutex{}}
 }
-
-

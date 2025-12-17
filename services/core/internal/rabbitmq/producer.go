@@ -5,26 +5,16 @@ import (
 	"time"
 
 	"reminder-hub/pkg/logger"
+	"reminder-hub/pkg/models"
 	pkgrabbitmq "reminder-hub/pkg/rabbitmq"
 
 	"github.com/streadway/amqp"
 )
 
-type EmailMessage struct {
-	EmailID       string `json:"email_id"`
-	UserID        string `json:"user_id"`
-	MessageID     string `json:"message_id"`
-	FromAddress   string `json:"from_address"`
-	Subject       string `json:"subject"`
-	BodyText      string `json:"body_text"`
-	DateReceived  string `json:"date_received"`
-	SyncTimestamp string `json:"sync_timestamp"`
-}
-
 type EmailBatchMessage struct {
-	Emails        []*EmailMessage `json:"emails"`
-	BatchSize     int             `json:"batch_size"`
-	SyncTimestamp string          `json:"sync_timestamp"`
+	Emails        *models.RawEmails `json:"emails"`
+	BatchSize     int               `json:"batch_size"`
+	SyncTimestamp string            `json:"sync_timestamp"`
 }
 
 type Producer struct {
@@ -42,18 +32,18 @@ func (p *Producer) Close() error {
 	return nil
 }
 
-func (p *Producer) PublishEmail(message *EmailMessage) error {
+func (p *Producer) PublishEmail(message *models.RawEmail) error {
 	return p.publisher.PublishMessage(message)
 }
 
-func (p *Producer) PublishEmailBatch(messages []*EmailMessage) error {
-	if len(messages) == 0 {
+func (p *Producer) PublishEmailBatch(messages *models.RawEmails) error {
+	if len(messages.RawEmail) == 0 {
 		return nil
 	}
 
 	batchMessage := &EmailBatchMessage{
 		Emails:        messages,
-		BatchSize:     len(messages),
+		BatchSize:     len(messages.RawEmail),
 		SyncTimestamp: time.Now().Format(time.RFC3339),
 	}
 

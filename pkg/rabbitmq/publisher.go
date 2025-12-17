@@ -44,6 +44,8 @@ func (p *Publisher) PublishMessage(msg interface{}) error {
 	typeName := reflect.TypeOf(msg).Elem().Name()
 	snakeTypeName := strcase.ToSnake(typeName)
 
+	p.log.Info(context.Background(), "SnakeTypeName of Publisher: ", snakeTypeName)
+
 	channel, err := p.conn.Channel()
 	if err != nil {
 		p.log.Error(p.ctx, "Error in opening channel to consume message %v", err)

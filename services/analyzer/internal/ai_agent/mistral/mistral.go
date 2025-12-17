@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"sync"
-	"time"
 	"reminder-hub/pkg/logger"
 	"reminder-hub/pkg/models"
 	"reminder-hub/services/analyzer/internal/shared/delivery"
 	modan "reminder-hub/services/analyzer/models"
+	"sync"
+	"time"
 
 	"github.com/labstack/gommon/log"
 	"github.com/streadway/amqp"
@@ -19,7 +19,7 @@ import (
 )
 
 type MistralConfig struct {
-	api     string        `env:"API"`
+	api     string        `env:"MISTRAL_API_KEY"`
 	model   string        `env:"MODEL" env-default:"open-mistral-7b"`
 	timeout time.Duration `env:"TIMEOUT" env-default:"30s"`
 	retries int           `env:"RETRIES" env-default:"3"`
