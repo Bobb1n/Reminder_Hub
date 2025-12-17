@@ -1,18 +1,44 @@
 FROM golang:1.25-alpine AS builder
 
-WORKDIR /app
-
-COPY . .
-
-RUN go mod tidy
-
-RUN go build -o service ./cmd/service
-
-FROM alpine:latest
+RUN apk add --no-cache git make
 
 WORKDIR /app
 
-COPY --from=builder /app/service .
+# Копируем корневой go.mod для монорепо
+COPY go.mod ./
+COPY go.sum* ./
+
+# Копируем общие пакеты из корня
+COPY pkg/ ./pkg/
+
+# Копируем код сервиса api-gateway
+COPY services/api-gateway/ ./services/api-gateway/
+
+# Переходим в директорию сервиса
+WORKDIR /app/services/api-gateway
+
+# Скачиваем зависимости
+RUN go mod download
+
+# Собираем приложение
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s" \
+    -o /app/bin/service \
+    ./cmd/service/main.go
+
+FROM alpine:latest AS runtime
+
+RUN apk --no-cache add ca-certificates tzdata
+
+RUN addgroup -g 1000 appuser && adduser -D -u 1000 -G appuser appuser
+WORKDIR /app
+
+COPY --from=builder /app/bin/service /app/service
+
+RUN chown -R appuser:appuser /app
+USER appuser
+
+FROM runtime AS service
 
 EXPOSE 8080
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"reminder-hub/pkg/logger"
 
 	"auth/internal/usecase"
 )
@@ -24,10 +25,11 @@ const (
 type Server struct {
 	httpServer *http.Server
 	handlers   *AuthHandlers
+	logger     *logger.CurrentLogger
 }
 
-func NewServer(port int, authUsecase usecase.AuthUsecase) *Server {
-	handlers := NewAuthHandlers(authUsecase)
+func NewServer(port int, authUsecase usecase.AuthUsecase, log *logger.CurrentLogger) *Server {
+	handlers := NewAuthHandlers(authUsecase, log)
 
 	router := setupRouter(handlers)
 
@@ -42,6 +44,7 @@ func NewServer(port int, authUsecase usecase.AuthUsecase) *Server {
 	return &Server{
 		httpServer: httpServer,
 		handlers:   handlers,
+		logger:     log,
 	}
 }
 
@@ -94,26 +97,29 @@ func (s *Server) Start() error {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
+	ctx := context.Background()
+	
 	go func() {
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fmt.Printf("Server failed to start: %v\n", err)
+			s.logger.Error(ctx, "Server failed to start", "error", err)
 			os.Exit(1)
 		}
 	}()
 
-	fmt.Printf("Server started on %s\n", s.httpServer.Addr)
+	s.logger.Info(ctx, "Server started", "addr", s.httpServer.Addr)
 
 	<-quit
-	fmt.Println("Shutting down server...")
+	s.logger.Info(ctx, "Shutting down server...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
 	defer cancel()
 
-	if err := s.httpServer.Shutdown(ctx); err != nil {
+	if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
+		s.logger.Error(ctx, "Server forced to shutdown", "error", err)
 		return fmt.Errorf("server forced to shutdown: %w", err)
 	}
 
-	fmt.Println("Server exited gracefully")
+	s.logger.Info(ctx, "Server exited gracefully")
 	return nil
 }
 

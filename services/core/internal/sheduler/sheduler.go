@@ -7,7 +7,7 @@ import (
 
 	"core/internal/database"
 	"core/internal/imap"
-	"github.com/rs/zerolog/log"
+	"reminder-hub/pkg/logger"
 )
 
 type Scheduler struct {
@@ -18,27 +18,31 @@ type Scheduler struct {
 	syncInterval time.Duration
 	stopChan     chan struct{}
 	wg           sync.WaitGroup
+	log          *logger.CurrentLogger
 }
 
-func NewScheduler(db *database.DB, syncer *imap.Syncer, maxWorkers, batchSize int, syncInterval time.Duration) *Scheduler {
+func NewScheduler(db *database.DB, syncer *imap.Syncer, maxWorkers, batchSize int, syncInterval time.Duration, log *logger.CurrentLogger) *Scheduler {
 	return &Scheduler{
 		db: db, syncer: syncer, maxWorkers: maxWorkers,
 		batchSize: batchSize, syncInterval: syncInterval,
 		stopChan: make(chan struct{}),
+		log:      log,
 	}
 }
 
 func (s *Scheduler) Start() {
-	log.Info().Msgf("Starting scheduler: %d workers, batch %d, interval %v", s.maxWorkers, s.batchSize, s.syncInterval)
+	ctx := context.Background()
+	s.log.Info(ctx, "Starting scheduler", "workers", s.maxWorkers, "batch", s.batchSize, "interval", s.syncInterval.String())
 	s.wg.Add(1)
 	go s.run()
 }
 
 func (s *Scheduler) Stop() {
-	log.Info().Msg("Stopping scheduler")
+	ctx := context.Background()
+	s.log.Info(ctx, "Stopping scheduler")
 	close(s.stopChan)
 	s.wg.Wait()
-	log.Info().Msg("Scheduler stopped")
+	s.log.Info(ctx, "Scheduler stopped")
 }
 
 func (s *Scheduler) run() {
@@ -59,11 +63,11 @@ func (s *Scheduler) run() {
 
 func (s *Scheduler) syncAll() {
 	ctx := context.Background()
-	log.Info().Msg("Sync cycle started")
+	s.log.Info(ctx, "Sync cycle started")
 
 	integrations, err := s.db.GetIntegrationsForSync(ctx, s.batchSize)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to get integrations")
+		s.log.Error(ctx, "Failed to get integrations", "error", err)
 		return
 	}
 
@@ -71,7 +75,7 @@ func (s *Scheduler) syncAll() {
 		return
 	}
 
-	log.Info().Msgf("Found %d integrations", len(integrations))
+	s.log.Info(ctx, "Found integrations", "count", len(integrations))
 
 	jobs := make(chan database.EmailIntegration, len(integrations))
 	results := make(chan error, len(integrations))
@@ -88,13 +92,13 @@ func (s *Scheduler) syncAll() {
 	success := 0
 	for range integrations {
 		if err := <-results; err != nil {
-			log.Error().Err(err).Msg("Sync failed")
+			s.log.Error(ctx, "Sync failed", "error", err)
 		} else {
 			success++
 		}
 	}
 
-	log.Info().Msgf("Sync completed: %d/%d", success, len(integrations))
+	s.log.Info(ctx, "Sync completed", "success", success, "total", len(integrations))
 }
 
 func (s *Scheduler) worker(jobs <-chan database.EmailIntegration, results chan<- error) {

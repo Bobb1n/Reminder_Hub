@@ -7,6 +7,8 @@ import (
 	"core/internal/api/response"
 	"core/internal/database"
 	"core/internal/security"
+	"reminder-hub/pkg/logger"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"gopkg.in/go-playground/validator.v9"
@@ -20,7 +22,7 @@ func (cv *CustomValidator) Validate(i interface{}) error {
 	return cv.validator.Struct(i)
 }
 
-func SetupRoutes(e *echo.Echo, db *database.DB, encryptor security.Encryptor, internalToken string) {
+func SetupRoutes(e *echo.Echo, db *database.DB, encryptor security.Encryptor, internalToken string, log *logger.CurrentLogger) {
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
@@ -28,7 +30,7 @@ func SetupRoutes(e *echo.Echo, db *database.DB, encryptor security.Encryptor, in
 
 	e.Validator = &CustomValidator{validator: validator.New()}
 
-	handler := NewHandler(db, encryptor)
+	handler := NewHandler(db, encryptor, log)
 
 	api := e.Group("/api")
 

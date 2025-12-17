@@ -12,7 +12,10 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
 
 	e := echo.New()
 
@@ -23,19 +26,19 @@ func main() {
 		AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE},
 	}))
 
-	e.Use(auth.AuthMiddleware(cfg.AuthServiceURL))
+	e.Use(auth.AuthMiddleware(cfg.AuthServiceURL, cfg.Logger))
 
 	authProxy, err := proxy.AuthProxy(cfg.AuthServiceURL)
 	if err != nil {
 		log.Fatalf("Failed to create auth proxy: %v", err)
 	}
 
-	coreProxy, err := proxy.NewServiceProxy(cfg.CoreServiceURL, cfg.InternalToken)
+	coreProxy, err := proxy.NewServiceProxy(cfg.CoreServiceURL, cfg.InternalToken, cfg.Logger)
 	if err != nil {
 		log.Fatalf("Failed to create core proxy: %v", err)
 	}
 
-	collectorProxy, err := proxy.NewServiceProxy(cfg.CollectorServiceURL, cfg.InternalToken)
+	collectorProxy, err := proxy.NewServiceProxy(cfg.CollectorServiceURL, cfg.InternalToken, cfg.Logger)
 	if err != nil {
 		log.Fatalf("Failed to create collector proxy: %v", err)
 	}
@@ -54,11 +57,13 @@ func main() {
 	{
 		// Применяем AutoIMAPMiddleware только к integrations
 		integrations := api.Group("/integrations/email")
-		integrations.Use(auth.AutoIMAPMiddleware()) // Добавляем middleware
+		integrations.Use(auth.AutoIMAPMiddleware(cfg.Logger)) // Добавляем middleware
+		// Обрабатываем как сам путь, так и дополнительные сегменты
+		integrations.Any("", coreProxy.Proxy)
 		integrations.Any("/*", coreProxy.Proxy)
 
 		reminders := api.Group("/reminders")
-		reminders.Any("/*", coreProxy.Proxy)
+		reminders.Any("/*", collectorProxy.Proxy)
 	}
 
 	internal := e.Group("/internal")

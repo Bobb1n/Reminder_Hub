@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,9 +10,10 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"reminder-hub/pkg/logger"
 )
 
-func AuthMiddleware(authServiceURL string) echo.MiddlewareFunc {
+func AuthMiddleware(authServiceURL string, log *logger.CurrentLogger) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			if c.Path() == "/health" || strings.HasPrefix(c.Path(), "/auth/") {
@@ -28,7 +30,7 @@ func AuthMiddleware(authServiceURL string) echo.MiddlewareFunc {
 			}
 
 			token := parts[1]
-			userID, err := validateToken(authServiceURL, token)
+			userID, err := validateToken(authServiceURL, token, log, c.Request().Context())
 			if err != nil {
 				return echo.NewHTTPError(http.StatusUnauthorized, "Invalid token")
 			}
@@ -44,17 +46,20 @@ type validateTokenResponse struct {
 	Email  string `json:"email"`
 }
 
-func validateToken(authServiceURL, token string) (string, error) {
+func validateToken(authServiceURL, token string, log *logger.CurrentLogger, ctx context.Context) (string, error) {
 	validateURL := strings.TrimSuffix(authServiceURL, "/") + "/auth/validate"
 
 	resp, err := sendValidateRequest(validateURL, token)
 	if err != nil {
+		log.Error(ctx, "validate request failed", "error", err)
 		return "", fmt.Errorf("validate request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", handleErrorResponse(resp)
+		err := handleErrorResponse(resp)
+		log.Warn(ctx, "token validation failed", "status", resp.StatusCode, "error", err)
+		return "", err
 	}
 
 	return parseValidateResponse(resp.Body)

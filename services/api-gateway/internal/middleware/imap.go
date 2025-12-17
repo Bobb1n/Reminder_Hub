@@ -3,9 +3,12 @@ package middleware
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
+
+	"reminder-hub/pkg/logger"
 
 	"github.com/labstack/echo/v4"
 )
@@ -17,45 +20,73 @@ type IMAPSettings struct {
 }
 
 // AutoIMAPMiddleware автоматически определяет IMAP настройки по email
-func AutoIMAPMiddleware() echo.MiddlewareFunc {
+func AutoIMAPMiddleware(log *logger.CurrentLogger) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			ctx := c.Request().Context()
+			requestPath := c.Request().URL.Path
+			method := c.Request().Method
+
+			log.Debug(ctx, "AutoIMAPMiddleware: checking request", "method", method, "path", requestPath)
+
 			// Применяем только к POST запросам на создание интеграции
-			if c.Request().Method != http.MethodPost {
+			if method != http.MethodPost {
+				log.Debug(ctx, "AutoIMAPMiddleware: skipping non-POST request")
 				return next(c)
 			}
 
 			// Проверяем, что это запрос на создание интеграции
-			if !strings.Contains(c.Path(), "/integrations/email") {
+			// Используем реальный путь запроса, а не шаблон маршрута
+			if !strings.Contains(requestPath, "/integrations/email") {
+				log.Debug(ctx, "AutoIMAPMiddleware: skipping non-integrations path")
 				return next(c)
 			}
 
 			// Читаем body
 			bodyBytes, err := io.ReadAll(c.Request().Body)
 			if err != nil {
+				log.Error(ctx, "AutoIMAPMiddleware: failed to read body", "error", err)
 				return echo.NewHTTPError(http.StatusBadRequest, "Failed to read request body")
 			}
 			c.Request().Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
+			log.Debug(ctx, "AutoIMAPMiddleware: read body", "length", len(bodyBytes), "content", string(bodyBytes))
+
 			// Парсим JSON
 			var reqBody map[string]interface{}
 			if err := json.Unmarshal(bodyBytes, &reqBody); err != nil {
+				log.Warn(ctx, "AutoIMAPMiddleware: failed to parse JSON", "error", err, "body", string(bodyBytes))
 				return next(c) // Если не JSON, пропускаем
 			}
+
+			log.Debug(ctx, "AutoIMAPMiddleware: parsed JSON", "fields", reqBody)
 
 			// Проверяем, есть ли email_address
 			email, ok := reqBody["email_address"].(string)
 			if !ok || email == "" {
+				log.Debug(ctx, "AutoIMAPMiddleware: no email_address found", "reqBody", reqBody)
 				return next(c) // Если нет email, пропускаем
 			}
 
+			log.Info(ctx, "AutoIMAPMiddleware: processing email", "email", email, "original_body_length", len(bodyBytes))
+
 			// Если IMAP настройки не указаны - определяем автоматически
-			if reqBody["imap_host"] == nil || reqBody["imap_host"] == "" {
+			imapHost, hasHost := reqBody["imap_host"].(string)
+			if !hasHost || imapHost == "" {
 				settings := getIMAPSettingsByEmail(email)
-				
+
 				reqBody["imap_host"] = settings.Host
-				reqBody["imap_port"] = settings.Port
+				reqBody["imap_port"] = float64(settings.Port) // JSON числа всегда float64
 				reqBody["use_ssl"] = settings.SSL
+			} else {
+				// Если host указан, но port нет - добавляем дефолтный порт
+				if reqBody["imap_port"] == nil {
+					reqBody["imap_port"] = float64(993)
+				}
+				// Если use_ssl не указан - добавляем дефолтное значение
+				if reqBody["use_ssl"] == nil {
+					reqBody["use_ssl"] = true
+				}
 			}
 
 			// Сериализуем обратно в JSON
@@ -68,6 +99,10 @@ func AutoIMAPMiddleware() echo.MiddlewareFunc {
 			c.Request().Body = io.NopCloser(bytes.NewBuffer(newBodyBytes))
 			c.Request().ContentLength = int64(len(newBodyBytes))
 
+			// Обновляем Content-Length header
+			c.Request().Header.Set("Content-Length", fmt.Sprintf("%d", len(newBodyBytes)))
+
+			log.Info(ctx, "AutoIMAPMiddleware: modified body", "original_length", len(bodyBytes), "new_length", len(newBodyBytes), "content", string(newBodyBytes))
 			return next(c)
 		}
 	}
@@ -134,4 +169,3 @@ func getDefaultIMAPSettings(domain string) IMAPSettings {
 		SSL:  true,
 	}
 }
-
