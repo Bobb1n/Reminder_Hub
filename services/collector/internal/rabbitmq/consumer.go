@@ -37,7 +37,7 @@ func NewConsumer(url, queueName string, handler MessageHandler) (*Consumer, erro
 	}
 
 	err = channel.ExchangeDeclare(
-		"parsed.emails",
+		"parsed_emails",
 		"direct",
 		true,
 		false,
@@ -63,8 +63,8 @@ func NewConsumer(url, queueName string, handler MessageHandler) (*Consumer, erro
 
 	err = channel.QueueBind(
 		queue.Name,
-		"email.parsed",
-		"parsed.emails",
+		"parsed_emails",
+		"parsed_emails",
 		false,
 		nil,
 	)

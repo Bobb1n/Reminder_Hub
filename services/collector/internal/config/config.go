@@ -18,14 +18,16 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	if _, err := os.Stat(".env"); err == nil {
-		_ = godotenv.Load(".env")
+	if _, err := os.Stat("../../../../.env"); err == nil {
+		_ = godotenv.Load("../../../../.env")
+	} else {
+		log.Error().Err(err)
 	}
 
 	cfg := &Config{
 		DBURL:            env("DB_URL", ""),
 		RabbitURL:        env("RABBIT_URL", ""),
-		QueueName:        env("RABBIT_QUEUE_NAME", "analyzed_emails"),
+		QueueName:        env("RABBIT_QUEUE_NAME", "parsed_emails_queue"),
 		ServerPort:       env("SERVER_PORT", "8080"),
 		ServerHost:       env("SERVER_HOST", "0.0.0.0"),
 		InternalAPIToken: env("INTERNAL_API_TOKEN", "gateway-secret-token"),

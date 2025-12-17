@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: reminderhub-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-reminder}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reminder}
+      POSTGRES_DB: ${POSTGRES_DB:-reminderhub}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reminder}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  collector-service:
+    build: 
+      dockerfile: Dockerfile
+    container_name: collector-service
+    env_file:
+      - ../../.env
+    environment:
+      - SERVER_PORT=8083
+      - DB_URL=postgres://${POSTGRES_USER:-reminder}:${POSTGRES_PASSWORD:-reminder}@postgres:5432/${POSTGRES_DB:-reminderhub}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+volumes:
+  pgdata:
+    driver: local

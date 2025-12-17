@@ -3,8 +3,8 @@ package rabbitmq
 import (
 	"context"
 	"fmt"
-	"time"
 	"reminder-hub/pkg/logger"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/streadway/amqp"
@@ -16,7 +16,7 @@ type RabbitMQConfig struct {
 	User         string `env:"USER" env-default:"rabbit"`
 	Password     string `env:"PASSWORD" env-default:"rabbit"`
 	ExchangeName string `env:"EXCHANGE" env-default:"donotmatter"`
-	Kind         string `env:"KIND" env-default:"topic"`
+	Kind         string `env:"KIND" env-default:"direct"`
 }
 
 // Initialize new channel for rabbitmq
@@ -64,5 +64,3 @@ func NewRabbitMQConn(cfg *RabbitMQConfig, ctx context.Context, log *logger.Curre
 
 	return conn, err
 }
-
-
