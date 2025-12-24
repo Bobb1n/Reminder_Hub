@@ -155,7 +155,7 @@ func (c *Consumer) processMessage(ctx context.Context, msg amqp.Delivery) {
 
 		log.Error().Err(err).Msgf("Failed to process message: %s", messageID)
 
-		if nackErr := msg.Nack(false, true); nackErr != nil {
+		if nackErr := msg.Nack(false, false); nackErr != nil {
 			log.Error().Err(nackErr).Msg("Failed to nack message")
 		}
 		return

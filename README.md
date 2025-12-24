@@ -261,3 +261,119 @@ docker-compose up --build
 - **Clean Architecture** в сервисах
 - **Event-driven** архитектура через RabbitMQ
 - **API Gateway** паттерн для маршрутизации
+
+## Документация полного API маршрута
+
+Эта секция покрывает полный пользовательский путь. Начиная от регистрации в сервисе `auth` и заканчивая получением данных из сервиса `collector`
+
+### 1. Регистрация пользователя
+
+`POST /auth/register`
+
+**Пример запроса:**
+```json
+{
+    "password":  "password123",
+    "email":  "testuser_1@example.com"
+}
+```
+
+**Пример ответа:**
+```json
+{
+    "message":"User created successfully",
+    "user_id":"<USER_ID>"
+}
+```
+
+
+
+### 2. Логин Пользователя
+
+`POST /auth/login`
+
+**Пример запроса:**
+```json
+{
+    "password":  "password123",
+    "email":  "testuser_1@example.com"
+}
+```
+
+**Пример ответа:**
+```json
+{
+    "access_token":"<ACCESS_TOKEN>",
+    "expires_in":900,
+    "refresh_token":"<REFRESH_TOKEN>",
+    "token_type":"Bearer"
+}
+```
+
+### 3. Создание интеграции с Email
+
+`POST /api/v1/integrations/email`
+
+**Пример запроса:**
+```json
+{
+    "imap_host":  "imap.example.com",
+    "email_address":  "testuser_1@example.com",
+    "imap_port":  993,
+    "use_ssl":  true,
+    "password":  "password123"
+}
+
+```
+
+**Пример ответа:**
+```json
+{   
+    "id":"<ID>",
+    "status":"created"
+}
+```
+
+
+
+### 4. Симуляция отправки Email в RabbitMQ:
+
+**Exchange:** 
+`Raw_emails`
+
+```json
+{"emails":
+[
+    {
+        "email_id":"<EMAIL_ID>",    
+        "subject":"Action Required: Finalize Q4 Report Slides","body_text":"Hi team, Just a reminder that the presentation for the Q4 financial review is coming up. I\u0027ve put together the initial draft, but I need someone to take ownership of the final slides. Specifically, can you please create a new summary slide that visualizes the YoY growth for our main product lines? Also, please double-check all the figures against the master spreadsheet in the shared drive. This needs to be completed by Friday, December 26th, EOD. Let me know if you have any questions. Thanks!","from_address":"manager@example.com","sync_timestamp":"2025-12-24T19:33:52.4931351Z","message_id":"test-1806753482",
+        "date_received":"2025-12-24T19:33:52.4850641Z","user_id":"7fbdb3d5-eced-4736-a6e5-eddc9a8dbf79"}
+]
+}
+```
+
+
+
+### 5. Get Processed Tasks
+
+`GET /api/v1/reminders/`
+
+**Example Response:**
+
+```json
+[
+    {  
+        "id":"<ID>",
+        "user_id":"<USER_ID>",
+        "email_id":"<EMAIL_ID>",
+        "title":"<TITLE>", 
+        "Description":"<DESCRIPTION>",
+        "deadline":"2025-12-26T23:00:00Z",
+        "status":"pending",
+        "priority":"urgent",
+        "created_at":"2025-12-24T19:33:53.810241Z","updated_at":"2025-12-24T19:33:53.810241Z"
+    }
+]
+
+```
+

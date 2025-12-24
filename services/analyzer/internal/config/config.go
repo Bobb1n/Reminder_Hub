@@ -48,8 +48,8 @@ func InitConfig(fx fx.Lifecycle) (*Config, *logger.CurrentLogger, *echoserver.Ec
 	cfg.Rabbitmq = parseRabbitMQConfig()
 
 	if cfg.MistralConfig != nil {
-		if openAIKey := os.Getenv("OPENAI_API_KEY"); openAIKey != "" {
-			cfg.MistralConfig.SetAPI(openAIKey)
+		if mistralAPIKey := os.Getenv("MISTRAL_API_KEY"); mistralAPIKey != "" {
+			cfg.MistralConfig.SetAPI(mistralAPIKey)
 		}
 	}
 

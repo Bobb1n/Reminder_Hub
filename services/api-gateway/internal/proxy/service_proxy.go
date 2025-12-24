@@ -74,9 +74,8 @@ func (p *ServiceProxy) Proxy(c echo.Context) error {
 		if p.serviceType == "collector" && strings.HasPrefix(requestPath, "/api/v1/reminders") {
 			// Заменяем /api/v1/reminders на /api/v1/tasks
 			// Убираем /reminders из пути
-			newPath := strings.Replace(requestPath, "/reminders", "", 1)
-			req.URL.Path = newPath
-			p.logger.Debug(ctx, "Rewritten path for reminders", "from", requestPath, "to", newPath)
+			req.URL.Path = "/api/v1/tasks"
+			p.logger.Debug(ctx, "Rewritten path for reminders", "from", requestPath, "to", req.URL.Path)
 		}
 
 		// Копируем body из модифицированного запроса (после middleware)

@@ -19,18 +19,18 @@ func main() {
 	fx.New(
 		fx.Options(
 			fx.Provide(
-				config.InitConfig,        //✅
-				ht.NewContext,            //✅
-				echoserver.NewEchoServer, //✅
-				rabbitmq.NewRabbitMQConn, //✅
-				rabbitmq.NewPublisher,    //✅
-				validator.New,            //✅
+				config.InitConfig,
+				ht.NewContext,
+				echoserver.NewEchoServer,
+				rabbitmq.NewRabbitMQConn,
+				rabbitmq.NewPublisher,
+				validator.New,
 				mistral.NewMistralConn,
 				aiagent.NewAgent,
 			),
-			fx.Invoke(server.RunServers),                //✅
-			fx.Invoke(configurations.ConfigMiddlewares), //✅
-			fx.Invoke(rc.ConfigConsumers),               //✅
+			fx.Invoke(server.RunServers),
+			fx.Invoke(configurations.ConfigMiddlewares),
+			fx.Invoke(rc.ConfigConsumers),
 		),
 	).Run()
 }

@@ -37,7 +37,7 @@ func (c *Consumer[T]) ConsumeMessage(msg interface{}, dependencies T) error {
 	typeName := reflect.TypeOf(msg).Name()
 	snakeTypeName := strcase.ToSnake(typeName)
 
-	c.log.Info(context.Background(), "SnakeTyepName of Consumer: ", snakeTypeName)
+	c.log.Info(context.Background(), "SnakeTyepName of Consumer: ", "snake_type_name", snakeTypeName)
 
 	err = ch.ExchangeDeclare(
 		snakeTypeName, // name
@@ -61,6 +61,12 @@ func (c *Consumer[T]) ConsumeMessage(msg interface{}, dependencies T) error {
 		false, // exclusive
 		false, // no-wait
 		nil,   // arguments
+	)
+
+	err = ch.Qos(
+		1,
+		0,
+		false,
 	)
 
 	if err != nil {
